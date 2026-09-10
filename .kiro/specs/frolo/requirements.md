@@ -484,3 +484,77 @@ breadth is added.
   report a clear locked state and SHALL NOT fabricate or bypass decryption.
 - **20.8** THE SYSTEM SHALL store the vault file separately from the SQLite
   database and SHALL never place secret material in SQLite (§12.2, §12.3).
+
+
+---
+
+## Addendum A — Web-panel architecture (supersedes the Electron/IPC model)
+
+Frolo shipped its first milestone as an Electron desktop app. It has since
+**pivoted to a self-hosted web panel**. Where this addendum conflicts with §1.6
+and §17 (Electron IPC), the addendum governs. All other requirements (state
+machine, recipes, vault, providers, chains, licensing, security) are unchanged
+and preserved.
+
+### A.1 Delivery & access
+- **A.1.1** THE SYSTEM SHALL run as a web application inside a dedicated Linux VM
+  and SHALL be reachable at `http://<frolo-vm-ip>:4512`.
+- **A.1.2** THE SYSTEM SHALL bind to port 4512 and default to LAN use.
+- **A.1.3** THE SYSTEM SHALL NEVER automatically expose the panel through a
+  router; remote HTTPS SHALL be documented via a reverse proxy.
+- **A.1.4** WHEN accessed over plain HTTP, THE SYSTEM SHALL warn that it is
+  intended for a trusted LAN and SHALL NOT block initial setup.
+- **A.1.5** THE controller, SQLite database, encrypted vault, Playwright router
+  automation, Proxmox provider, SSH guest provider, and web server SHALL run
+  together on the Frolo VM.
+
+### A.2 Authenticated API + live events
+- **A.2.1** THE SYSTEM SHALL replace Electron IPC with an authenticated Fastify
+  HTTP API.
+- **A.2.2** THE SYSTEM SHALL stream live deployment events over SSE (or
+  WebSocket).
+- **A.2.3** THE SYSTEM SHALL require an authenticated session for every
+  non-public API route and SHALL reject unauthorized requests with 401.
+
+### A.3 Accounts & sessions
+- **A.3.1** THE SYSTEM SHALL create a first administrator during OOBE with secure
+  password hashing (scrypt).
+- **A.3.2** THE SYSTEM SHALL use protected sessions with secure cookie settings,
+  CSRF protection, login rate limiting, and session revocation.
+
+### A.4 First-run setup (OOBE)
+- **A.4.1** ON first visit THE SYSTEM SHALL run an OOBE covering: welcome, admin
+  creation, vault key generation + recovery code, Proxmox connection with a
+  restricted token, TLS-fingerprint review/pin, read-only validation, node
+  selection, template detection, default network profile, DHCP/VM-ID check,
+  optional router chain, optional Nginx gateway, and a final review.
+- **A.4.2** THE SYSTEM SHALL NOT create, modify, start, stop, expose, or delete
+  infrastructure during OOBE.
+- **A.4.3** THE SYSTEM SHALL show the vault recovery code once, require the user
+  to confirm they saved it, and SHALL NEVER log it.
+- **A.4.4** THE SYSTEM SHALL persist non-secret setup progress so a reload
+  resumes the stepper, and router/gateway steps SHALL be skippable.
+- **A.4.5** AFTER completion THE SYSTEM SHALL never show OOBE again unless setup
+  is reset from the local terminal.
+- **A.4.6** THE SYSTEM SHALL offer a "Try Frolo safely" option that creates a
+  local mock configuration and demonstrates the full Nginx deployment flow.
+
+### A.5 Interface
+- **A.5.1** THE SYSTEM SHALL use Material Design 2 via the official MUI library,
+  with light/dark + system themes saved per user, a navigation drawer, responsive
+  layout, dialogs, snackbars (not browser alerts), accessible forms, a visible
+  beta label, and honest observed status.
+
+### A.6 Packaging & operations
+- **A.6.1** THE SYSTEM SHALL ship a production Docker image (amd64 + arm64), a
+  Docker Compose configuration with a persistent data volume, a health check, and
+  graceful shutdown.
+- **A.6.2** THE SYSTEM SHALL provide an `install.sh` for Debian/Ubuntu that is
+  safe to rerun and provides uninstall, update, backup, restore, and diagnostics.
+- **A.6.3** Uninstall SHALL NEVER delete persistent data unless the user supplies
+  an explicit data-removal option.
+
+### A.7 Public/private boundary
+- **A.7.1** THE public `frolo-app` SHALL contain only the license-verification
+  public key; production signing keys and Boosty subscriber records SHALL live in
+  the private `frolo-server` service.

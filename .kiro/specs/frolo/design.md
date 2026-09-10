@@ -619,3 +619,72 @@ exactly like a real router UI — the same `RouterProvider` code path as real.
   reaches SQLite/logs/audit.
 - **Provider seam**: real implementations are added later behind the same
   interfaces; mock mode is the reference implementation and the test substrate.
+
+
+---
+
+## Addendum A — Web-panel architecture (supersedes §2 process model)
+
+The Electron main/renderer split is replaced by a **self-hosted web server**.
+Everything privileged runs together on the Frolo VM; the browser is the client.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ Frolo VM (Linux)                                                  │
+│                                                                    │
+│  @frolo/server (Fastify, :4512)                                    │
+│   - auth: scrypt passwords, session cookies (HttpOnly/SameSite),   │
+│     CSRF double-submit, login rate limiting, session revocation    │
+│   - OOBE / setup routes (no infra mutation)                        │
+│   - REST API mirroring the controller + SSE live events            │
+│   - serves the built React panel (SPA fallback)                    │
+│                                                                    │
+│  @frolo/controller (in-process) + providers + SQLite + vault +     │
+│  Playwright + Proxmox/SSH providers  (all co-located)              │
+└──────────────────────────────────────────────────────────────────┘
+        ▲ authenticated HTTP + SSE (same origin, LAN)
+        ▼
+   Browser: React + MUI (Material Design 2) web panel
+```
+
+### A.1 Server (`packages/server`)
+- Fastify app bound to `0.0.0.0:4512`. `GET /api/health` (unauth) for Docker;
+  `GET /api/info` reports version/beta/behindTls. All other routes require a
+  session. SSE at `GET /api/events`.
+- **Auth**: `scrypt` password hashing; session token stored only as a SHA-256
+  hash; `frolo_session` cookie is HttpOnly + SameSite=Strict (+Secure behind TLS);
+  `frolo_csrf` double-submit cookie checked against the `x-frolo-csrf` header on
+  mutations; per-IP fixed-window login rate limiting; session revocation
+  (single + all).
+- **Composition**: `buildContext()` assembles the controller in mock mode with a
+  `FileKeychain` (master key in a `0600` file on the data volume), the SQLite
+  store, and the vault. The AuthStore shares the store's single SQLite handle.
+
+### A.2 OOBE
+- Setup routes create the first admin (returning the recovery code once and
+  writing only a *wrapped* copy to disk), validate Proxmox **read-only**, detect
+  templates, save a default network profile, and mark completion. Non-secret
+  progress is persisted; secrets (token, recovery code) are never stored in
+  progress or logs. A "Try Frolo safely" route seeds a mock config.
+
+### A.3 Web UI (`apps/ui`)
+- React + Vite + **MUI (Material Design 2)**. A same-origin HTTP client
+  (`fetch` + CSRF header) replaces the preload bridge; `EventSource` consumes
+  SSE. Light/dark/system theme saved per browser. OOBE uses a Material stepper.
+
+### A.4 Packaging
+- Multi-stage `Dockerfile` (Node 22 runtime), `docker-compose.yml` (persistent
+  `frolo-data` volume, health check, graceful shutdown), and `install.sh`
+  (Debian/Ubuntu, amd64+arm64; install/update/uninstall/backup/restore/
+  diagnostics; rerun-safe; data preserved unless `--remove-data`).
+
+### A.5 Recovery & reset
+- Vault recovery code wraps the master key under a scrypt-derived KEK
+  (AES-256-GCM). `frolo-reset-setup` is a **local-terminal-only** CLI that clears
+  the admin/sessions/OOBE flag but preserves deployments, mappings, recipes, and
+  the vault.
+
+### A.6 Node/native note
+- `better-sqlite3` is pinned to v12 (Node 24 compatible); the container uses Node
+  22. The store caches prepared statements and the auth tables share the store's
+  single connection.

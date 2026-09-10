@@ -17,6 +17,10 @@ data/
 *.sqlite
 *.sqlite3
 *.vault
+.dev-data/
+.smoke-data*/
+.verify-data/
+release/
 
 # Secrets and local configuration
 .env

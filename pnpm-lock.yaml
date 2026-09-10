@@ -84,6 +84,9 @@ importers:
       '@frolo/providers-router':
         specifier: workspace:*
         version: link:../packages/providers-router
+      '@frolo/server':
+        specifier: workspace:*
+        version: link:../packages/server
       '@frolo/store':
         specifier: workspace:*
         version: link:../packages/store

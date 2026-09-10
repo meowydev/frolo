@@ -172,3 +172,49 @@ providers.
 > Phase 8 is intentionally not started now. Per your instruction, Frolo stays in
 > mock mode, real mode is hidden, and it does not connect to real Proxmox or
 > routers until you approve.
+
+
+---
+
+## Addendum A — Web-panel pivot (completed)
+
+The Electron desktop app was pivoted to a self-hosted web panel. All domain
+logic, providers, vault, state machine, recipes, and their tests were preserved.
+
+- [x] A.1 `@frolo/server` — Fastify on :4512, wraps the existing controller;
+  auth (scrypt, session cookies, CSRF, login rate limit, session revocation);
+  REST API mirroring the controller; SSE live events; health check; graceful
+  shutdown; auth/setup DB migrations.
+- [x] A.2 Accounts + recovery code (shown once, confirmed, never logged);
+  local-terminal-only `frolo-reset-setup`; HTTP-not-HTTPS LAN warning +
+  reverse-proxy docs.
+- [x] A.3 OOBE backend (welcome → admin → recovery → validate Proxmox read-only →
+  node/template detect → network profile → optional router/gateway → review →
+  complete); no infra mutation; persisted non-secret progress; "Try Frolo safely"
+  mock config.
+- [x] A.4 Removed Electron (`apps/desktop` deleted); UI talks to the HTTP API.
+- [x] A.5 MUI Material Design 2 web UI (light/dark/system, nav drawer, responsive,
+  dialogs, snackbars, accessible forms, beta label, FAB, chips, linear progress,
+  honest status; OOBE Material stepper with Back/Continue/Skip/Test
+  Connection/Finish; no double-submit; progress preserved on reload).
+- [x] A.6 Wired UI to Fastify API + SSE (login/logout, dashboard, wizard, live
+  timeline, details, routers, recipes, vault/audit, mock-mode selection).
+- [x] A.7 Dev/build tooling (`pnpm dev/build/test/typecheck/lint`), production
+  Dockerfile, docker-compose (persistent volume, health check, graceful
+  shutdown), `install.sh` (Debian/Ubuntu amd64+arm64; uninstall/update/backup/
+  restore/diagnostics; rerun-safe; data preserved unless `--remove-data`).
+- [x] A.8 Release artifacts (multi-arch image build config, compose bundle,
+  checksums, install script; `.deb` documented as a later task; no keys bundled).
+- [x] A.9 E2E tests (first setup, interrupted-setup recovery, login/logout, mock
+  Nginx deployment, service restart + persistent data, installer safety, expired
+  license preserves infra, unauthorized rejection).
+- [x] A.10 Verified: typecheck clean, 148 tests pass, production build succeeds,
+  and a live full-HTTP OOBE + mock deployment reaches Ready. No real Proxmox,
+  guest, router, gateway, DNS, or Meowerity production service was contacted.
+- [x] A.11 Specs + README + private-service boundary updated for the web
+  architecture.
+
+### Later (not part of this beta)
+- [ ] Native `.deb` packaging pipeline (documented in docs/RELEASE.md).
+- [ ] Additional template OS families (Debian, Rocky, Alma, Fedora, Alpine).
+- [ ] Nginx gateway automation (create/connect gateway, Let's Encrypt, etc.).

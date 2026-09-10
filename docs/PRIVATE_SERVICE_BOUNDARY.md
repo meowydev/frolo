@@ -67,6 +67,42 @@ is published (e.g. as a non-secret `keys.json`) and embedded in the self-hosted
 application through its public-key configuration. The private half never leaves
 the service.
 
+## frolo-app vs frolo-server (web architecture)
+
+The product is split into two explicit boundaries:
+
+| | **frolo-app** (this repo, public/open) | **frolo-server** (private, Meowerity) |
+| --- | --- | --- |
+| What | The self-hosted web panel + local controller + deployment engine + local encrypted vault + recipes + license **verifier** + installer + packaging + tests | The hosted service for accounts, Boosty verification, production license **issuance**, signed update manifests, official recipe publishing, notifications, and future hosted features |
+| Runs where | Inside the user's dedicated Linux VM, LAN-only on `:4512` | On Meowerity infrastructure |
+| Keys | Ships only the **public** verification key | Holds the **private** signing key (HSM/secret store) |
+
+### frolo-server MUST NEVER receive
+
+- Proxmox API tokens
+- Router administrator passwords
+- SSH private keys or guest host keys
+- Recorded router workflows or their variable values
+
+Those live only in the user's local encrypted vault on the Frolo VM and never
+leave it. frolo-server only ever sees a **device code** (a random, non-secret
+identifier) and issues a signed entitlement in return.
+
+### Future frolo-server responsibilities (documented, not implemented here)
+
+- **Accounts + device codes**: map Boosty supporters to device codes and issued
+  licenses.
+- **Signed update manifests**: publish release metadata the app can verify with
+  the same public-key mechanism before updating.
+- **Official recipe publishing**: sign recipe packs so the app can verify them
+  before running (the app already requires checksum-verified, typed recipes).
+- **Optional notifications / monitoring**: opt-in, never receiving infrastructure
+  secrets.
+
+These are contracts and boundaries only. This public repo implements the
+**client side** (verification) and a **development-only** issuer/CLI so the flow
+can be exercised without any production secret.
+
 ## Why this split
 
 Because the client is open-source and inspectable, entitlement authenticity is
