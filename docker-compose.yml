@@ -1,0 +1,36 @@
+# Frolo self-hosted web panel (beta). LAN-only by default on port 4512.
+# Data (SQLite, vault, keys) persists in a named volume. Frolo NEVER opens a
+# router mapping to expose itself — put it behind your own HTTPS reverse proxy
+# for remote access (see docs/REVERSE_PROXY.md).
+
+services:
+  frolo:
+    image: ${FROLO_IMAGE:-ghcr.io/meowerity/frolo:0.1.0-beta.1}
+    container_name: frolo
+    restart: unless-stopped
+    # Bind to the host on :4512. Change the left side to 127.0.0.1:4512 to keep
+    # it strictly local to this machine.
+    ports:
+      - "${FROLO_BIND:-0.0.0.0}:4512:4512"
+    environment:
+      FROLO_PORT: "4512"
+      FROLO_HOST: "0.0.0.0"
+      FROLO_DATA_DIR: "/opt/frolo/data"
+      FROLO_WEB_ROOT: "/app/web"
+      # Set to 1 only when Frolo runs behind an HTTPS reverse proxy.
+      FROLO_BEHIND_TLS: "${FROLO_BEHIND_TLS:-0}"
+      FROLO_ALLOWED_ORIGINS: "${FROLO_ALLOWED_ORIGINS:-}"
+    volumes:
+      - frolo-data:/opt/frolo/data
+    # Give the server time to flush on stop (graceful shutdown).
+    stop_grace_period: 20s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4512/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  frolo-data:
+    name: frolo-data

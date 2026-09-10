@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/contracts" },
+    { "path": "./packages/core" },
+    { "path": "./packages/vault" },
+    { "path": "./packages/store" },
+    { "path": "./packages/licensing" },
+    { "path": "./packages/providers-proxmox" },
+    { "path": "./packages/providers-guest" },
+    { "path": "./packages/providers-router" },
+    { "path": "./packages/controller" },
+    { "path": "./packages/server" }
+  ]
+}

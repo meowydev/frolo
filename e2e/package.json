@@ -1,0 +1,19 @@
+{
+  "name": "@frolo/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@frolo/contracts": "workspace:*",
+    "@frolo/controller": "workspace:*",
+    "@frolo/core": "workspace:*",
+    "@frolo/store": "workspace:*",
+    "@frolo/vault": "workspace:*",
+    "@frolo/providers-proxmox": "workspace:*",
+    "@frolo/providers-router": "workspace:*",
+    "@frolo/licensing": "workspace:*"
+  }
+}

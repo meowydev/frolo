@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Router A — Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Fixture A (req §14.3): a normal, clearly-labelled port-forwarding form.
+      Every input has an associated <label> and a stable name. This is the
+      "easy" router used to validate the happy replay path against a real
+      Playwright-driven DOM in Phase 8. No real credentials are ever stored.
+    -->
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 34rem; margin: 2rem auto; }
+      label { display:block; margin:.6rem 0 .2rem; font-weight:600; }
+      input, select { width:100%; padding:.4rem; }
+      button { margin-top:1rem; padding:.5rem 1rem; }
+      .status { margin-top:1rem; color:#137333; }
+      table { width:100%; margin-top:1rem; border-collapse:collapse; }
+      td, th { border:1px solid #ddd; padding:.3rem; text-align:left; }
+    </style>
+  </head>
+  <body>
+    <h1>Router A</h1>
+    <section aria-label="Sign in">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" />
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" />
+      <button id="login-btn" type="button">Sign in</button>
+    </section>
+
+    <h2>Port Forwarding</h2>
+    <section aria-label="Add rule">
+      <label for="rule-name">Rule name</label>
+      <input id="rule-name" name="rule_name" type="text" />
+      <label for="ext-port">External port</label>
+      <input id="ext-port" name="external_port" type="text" />
+      <label for="int-ip">Internal IP</label>
+      <input id="int-ip" name="internal_ip" type="text" />
+      <label for="int-port">Internal port</label>
+      <input id="int-port" name="internal_port" type="text" />
+      <label for="protocol">Protocol</label>
+      <select id="protocol" name="protocol">
+        <option>TCP</option>
+        <option>UDP</option>
+      </select>
+      <button id="save-btn" type="button">Add rule</button>
+      <p id="rule-status" class="status" role="status" hidden>Rule added</p>
+    </section>
+
+    <table aria-label="Existing rules">
+      <thead><tr><th>Name</th><th>Ext</th><th>Internal</th><th>Proto</th></tr></thead>
+      <tbody id="rules"></tbody>
+    </table>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.dev-data
+coverage
+*.sqlite
+*.sqlite-*
+*.vault
+data
+.env
+.env.*
+release

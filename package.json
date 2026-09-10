@@ -1,0 +1,32 @@
+{
+  "name": "frolo-app",
+  "version": "0.1.0-beta.1",
+  "private": true,
+  "description": "Frolo — a friendly self-hosted Proxmox deployment web panel for homelab users (beta, mock-first).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/*\" run build && pnpm --filter @frolo/ui build",
+    "build:packages": "pnpm -r --filter \"./packages/*\" run build",
+    "build:ui": "pnpm --filter @frolo/ui build",
+    "dev": "pnpm run build:packages && node scripts/dev.mjs",
+    "start": "node packages/server/dist/bin/frolo-server.js",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "ci": "pnpm run typecheck && pnpm run test",
+    "reset-setup": "node packages/server/dist/bin/frolo-reset-setup.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "eslint": "^10.10.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^2.1.8"
+  }
+}

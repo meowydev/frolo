@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RouterB Console</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Fixture B (req §14.4): a deliberately "hard" router. Inputs have random,
+      generated ids (so replay must NOT depend on them), there is nested
+      navigation to an Advanced > NAT page, an artificial loading spinner, and a
+      confirmation dialog on save. Stable hooks are role + accessible name,
+      <label>, and data-testid attributes. Login lives in an iframe.
+    -->
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; }
+      nav a { margin-right: 1rem; }
+      .spinner { display:none; }
+      .spinner.on { display:block; color:#8a6d00; }
+      .hidden { display:none; }
+      label { display:block; margin:.5rem 0 .2rem; font-weight:600; }
+      input, select { width:100%; padding:.4rem; }
+      dialog { padding:1rem; }
+    </style>
+  </head>
+  <body>
+    <h1>RouterB Console</h1>
+
+    <iframe id="auth" title="auth" srcdoc='
+      <label for="x8f2a-usr">Login</label>
+      <input id="x8f2a-usr" data-field="user" aria-label="Login" />
+      <label for="x8f2a-pwd">Login password</label>
+      <input id="x8f2a-pwd" data-field="pass" type="password" aria-label="Login password" />
+    '></iframe>
+
+    <nav>
+      <a href="#/" id="nav-home">Home</a>
+      <a href="#/advanced" id="nav-adv">Advanced</a>
+      <a href="#/advanced/nat" id="nav-nat">NAT / Port Forwarding</a>
+    </nav>
+
+    <p class="spinner" id="spinner" role="status">Loading…</p>
+
+    <section id="nat-panel" class="hidden" aria-label="NAT">
+      <h2>NAT / Port Forwarding</h2>
+      <label for="z91k-nm">Description</label>
+      <input id="z91k-nm" data-testid="rule-name" aria-label="Description" />
+      <label for="z91k-ep">WAN port</label>
+      <input id="z91k-ep" data-testid="ext-port" aria-label="WAN port" />
+      <label for="z91k-ip">LAN host</label>
+      <input id="z91k-ip" data-testid="int-ip" aria-label="LAN host" />
+      <label for="z91k-lp">LAN port</label>
+      <input id="z91k-lp" data-testid="int-port" aria-label="LAN port" />
+      <label for="z91k-pr">Protocol</label>
+      <select id="z91k-pr" data-testid="proto" aria-label="Protocol">
+        <option value="tcp">tcp</option>
+        <option value="udp">udp</option>
+      </select>
+      <button id="z91k-ap" data-testid="apply" type="button">Apply</button>
+    </section>
+
+    <dialog id="confirm">
+      <p>Apply new NAT rule?</p>
+      <button id="confirm-yes" type="button">Confirm</button>
+      <button id="confirm-no" type="button">Cancel</button>
+    </dialog>
+
+    <ul id="rules" aria-label="rules"></ul>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

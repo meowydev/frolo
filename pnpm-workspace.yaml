@@ -1,0 +1,14 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+  - "fixtures/*"
+  - "e2e"
+
+onlyBuiltDependencies:
+  - esbuild
+  - better-sqlite3
+
+verifyDepsBeforeRun: false
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true

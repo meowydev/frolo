@@ -1,0 +1,27 @@
+{
+  "name": "@frolo/controller",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@frolo/contracts": "workspace:*",
+    "@frolo/core": "workspace:*",
+    "@frolo/store": "workspace:*",
+    "@frolo/vault": "workspace:*",
+    "@frolo/licensing": "workspace:*",
+    "@frolo/providers-proxmox": "workspace:*",
+    "@frolo/providers-guest": "workspace:*",
+    "@frolo/providers-router": "workspace:*"
+  }
+}

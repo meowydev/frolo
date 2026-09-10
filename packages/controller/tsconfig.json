@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  "references": [
+    { "path": "../contracts" },
+    { "path": "../core" },
+    { "path": "../store" },
+    { "path": "../vault" },
+    { "path": "../licensing" },
+    { "path": "../providers-proxmox" },
+    { "path": "../providers-guest" },
+    { "path": "../providers-router" }
+  ],
+  "include": ["src/**/*.ts"]
+}
