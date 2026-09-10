@@ -16,7 +16,7 @@
 //   - map Boosty subscriber records to `subject` codes,
 //   - emit the same SignedLicense JSON shape defined in @frolo/contracts.
 
-import { createDevIssuer } from "../dev-issuer.js";
+import { createDevIssuer, devIssuerAllowed } from "../dev-issuer.js";
 import type { FroloTier } from "@frolo/contracts";
 import { FROLO_TIERS } from "@frolo/contracts";
 
@@ -49,6 +49,15 @@ function parseArgs(argv: string[]): Partial<CliInput> {
 }
 
 async function main() {
+  // Refuse to run in a production build. This CLI only exists for local dev.
+  if (!devIssuerAllowed()) {
+    process.stderr.write(
+      "error: the dev license CLI is disabled in production (NODE_ENV=production and no dev flag).\n" +
+        "Real licenses are issued by the private frolo-server. For local development set FROLO_DEV=1.\n",
+    );
+    process.exit(3);
+    return;
+  }
   const flags = parseArgs(process.argv.slice(2));
   let input: Partial<CliInput> = flags;
   if (!process.stdin.isTTY) {

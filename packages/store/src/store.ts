@@ -24,12 +24,33 @@ import { MIGRATIONS } from "./schema.js";
 
 export class FroloStore {
   private readonly db: Database.Database;
+  // Cache of prepared statements keyed by SQL. Reusing statement objects avoids
+  // short-lived Statement instances on every call, which can trip
+  // better-sqlite3's native finalizer under GC on some Node versions.
+  private readonly stmtCache = new Map<string, Database.Statement>();
 
   constructor(pathOrMemory: string) {
     this.db = new Database(pathOrMemory);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.migrate();
+  }
+
+  // Prepare-with-cache. New queries should use this instead of this.db.prepare.
+  private stmt(sql: string): Database.Statement {
+    let s = this.stmtCache.get(sql);
+    if (!s) {
+      s = this.db.prepare(sql);
+      this.stmtCache.set(sql, s);
+    }
+    return s;
+  }
+
+  // Expose the underlying connection so co-located stores (e.g. the server's
+  // AuthStore) can share ONE better-sqlite3 handle. Opening a second connection
+  // to the same file triggers a native finalizer assertion under GC.
+  rawDb(): Database.Database {
+    return this.db;
   }
 
   private migrate(): void {
@@ -523,6 +544,62 @@ export class FroloStore {
       detailSanitized: r.detail_sanitized as string,
       at: r.at as string,
     }));
+  }
+
+  // --- Proxmox connections (real mode; non-secret metadata only) ---
+  saveConnection(c: import("@frolo/contracts").ProxmoxConnection): void {
+    this.stmt(
+      `INSERT OR REPLACE INTO connection (id, name, host, node, token_id, cert_fingerprint, pinned, created_at)
+       VALUES (@id, @name, @host, @node, @tokenId, @certFingerprint, @pinned, @createdAt)`,
+    ).run({
+      id: c.id,
+      name: c.name,
+      host: c.host,
+      node: c.node,
+      tokenId: c.tokenId,
+      certFingerprint: c.certFingerprint ?? null,
+      pinned: c.pinned ? 1 : 0,
+      createdAt: c.createdAt,
+    });
+  }
+  getConnection(id: string): import("@frolo/contracts").ProxmoxConnection | null {
+    const r = this.stmt("SELECT * FROM connection WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+    if (!r) return null;
+    return {
+      id: r.id as string,
+      name: r.name as string,
+      host: r.host as string,
+      node: r.node as string,
+      tokenId: r.token_id as string,
+      certFingerprint: (r.cert_fingerprint as string) ?? undefined,
+      pinned: Boolean(r.pinned),
+      createdAt: r.created_at as string,
+    };
+  }
+  listConnections(): import("@frolo/contracts").ProxmoxConnection[] {
+    return (this.stmt("SELECT id FROM connection ORDER BY created_at ASC").all() as { id: string }[])
+      .map((x) => this.getConnection(x.id)!)
+      .filter(Boolean);
+  }
+  deleteConnection(id: string): void {
+    this.stmt("DELETE FROM connection WHERE id = ?").run(id);
+  }
+
+  // --- Runtime config (active mode + selected connection) ---
+  getRuntimeConfig(): { mode: "mock" | "real"; activeConnectionId: string | null } {
+    const r = this.stmt("SELECT * FROM runtime_config WHERE id = 1").get() as Record<string, unknown> | undefined;
+    if (!r) return { mode: "mock", activeConnectionId: null };
+    return {
+      mode: (r.mode as "mock" | "real") ?? "mock",
+      activeConnectionId: (r.active_connection_id as string) ?? null,
+    };
+  }
+  setRuntimeConfig(cfg: { mode: "mock" | "real"; activeConnectionId?: string | null }): void {
+    this.stmt(
+      `INSERT INTO runtime_config (id, mode, active_connection_id, updated_at)
+       VALUES (1, @mode, @conn, @at)
+       ON CONFLICT(id) DO UPDATE SET mode = excluded.mode, active_connection_id = excluded.active_connection_id, updated_at = excluded.updated_at`,
+    ).run({ mode: cfg.mode, conn: cfg.activeConnectionId ?? null, at: new Date().toISOString() });
   }
 
   // Introspection for the no-secret-columns test (req §12.2).

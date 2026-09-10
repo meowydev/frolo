@@ -4,3 +4,5 @@ export * from "./security.js";
 export * from "./auth/auth-store.js";
 export * from "./auth/password.js";
 export * from "./vault-setup.js";
+export * from "./updater.js";
+export * from "./updater-node.js";

@@ -5,7 +5,7 @@
 
 services:
   frolo:
-    image: ${FROLO_IMAGE:-ghcr.io/meowerity/frolo:0.1.0-beta.1}
+    image: ${FROLO_IMAGE:-ghcr.io/meowydev/frolo:0.1.0-beta.1}
     container_name: frolo
     restart: unless-stopped
     # Bind to the host on :4512. Change the left side to 127.0.0.1:4512 to keep

@@ -5,10 +5,14 @@ The beta release consists of:
 
 | Artifact | What it is |
 | --- | --- |
-| `ghcr.io/meowerity/frolo:<version>` | Multi-arch container image (**linux/amd64** + **linux/arm64**) running the Fastify server + built web panel |
+| `ghcr.io/meowydev/frolo:<version>` | Multi-arch container image (**linux/amd64** + **linux/arm64**) running the Fastify server + built web panel |
 | `docker-compose.yml` | Deploy bundle pinned to the release image, with a persistent data volume + health check |
 | `install.sh` | Installer for Debian/Ubuntu (amd64/arm64): installs/validates Docker, writes `/opt/frolo`, pulls the pinned image, starts it, waits for health, prints the ready URL |
-| `SHA256SUMS.txt` | Checksums for the shipped `docker-compose.yml` and `install.sh` |
+| `frolo-<version>.tar.gz` | Source archive consumed by the in-app source updater (`frolo-update`) — checksum-verified before build |
+| `SHA256SUMS.txt` | Checksums for the shipped `docker-compose.yml`, `install.sh`, and source archive |
+
+All artifacts are published on the GitHub release for the tag at
+[github.com/meowydev/frolo](https://github.com/meowydev/frolo/releases).
 
 ## Building the artifacts
 
@@ -35,7 +39,7 @@ sha256sum -c SHA256SUMS.txt
 
 Release artifacts contain **no development or production signing keys**. The
 license verifier ships only a public key; the private signing key lives in the
-separate closed-source issuer service (see
+separate private `frolo-server` issuer service (see
 [PRIVATE_SERVICE_BOUNDARY.md](PRIVATE_SERVICE_BOUNDARY.md)).
 
 ## `.deb` packaging — later task

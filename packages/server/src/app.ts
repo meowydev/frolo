@@ -9,6 +9,8 @@ import { registerSessionResolver, checkCsrf, checkOrigin } from "./security.js";
 import { registerAuthRoutes } from "./routes/auth-routes.js";
 import { registerSetupRoutes } from "./routes/setup-routes.js";
 import { registerAppRoutes } from "./routes/app-routes.js";
+import { registerConnectionRoutes } from "./routes/connection-routes.js";
+import { registerUpdateRoutes } from "./routes/update-routes.js";
 import { registerEventStream } from "./events-sse.js";
 
 export interface AppOptions {
@@ -76,6 +78,8 @@ export async function buildApp(ctx: AppContext, opts: AppOptions): Promise<Fasti
     inMemory: opts.inMemory,
   });
   registerAppRoutes(app, ctx);
+  registerConnectionRoutes(app, ctx);
+  registerUpdateRoutes(app, ctx);
   registerEventStream(app, ctx);
 
   // Serve the built React web panel (production) with SPA fallback. Skipped when

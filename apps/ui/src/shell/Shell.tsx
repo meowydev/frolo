@@ -26,6 +26,7 @@ import DnsIcon from "@mui/icons-material/Dns";
 import RouterIcon from "@mui/icons-material/Router";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import ShieldIcon from "@mui/icons-material/Shield";
+import SettingsIcon from "@mui/icons-material/Settings";
 import Brightness6Icon from "@mui/icons-material/Brightness6";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { AppEnvContext } from "../App.js";
@@ -37,6 +38,7 @@ import { DeploymentDetails } from "../screens/DeploymentDetails.js";
 import { Routers } from "../screens/Routers.js";
 import { Recipes } from "../screens/Recipes.js";
 import { VaultAudit } from "../screens/VaultAudit.js";
+import { Settings } from "../screens/Settings.js";
 
 const DRAWER_WIDTH = 236;
 
@@ -45,6 +47,7 @@ const NAV = [
   { to: "/routers", label: "Routers", icon: <RouterIcon /> },
   { to: "/recipes", label: "Recipes", icon: <MenuBookIcon /> },
   { to: "/vault", label: "Vault & audit", icon: <ShieldIcon /> },
+  { to: "/settings", label: "Settings", icon: <SettingsIcon /> },
 ];
 
 export function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
@@ -139,6 +142,7 @@ export function Shell({ onLogout }: { onLogout: () => void }): JSX.Element {
           <Route path="/routers" element={<Routers />} />
           <Route path="/recipes" element={<Recipes />} />
           <Route path="/vault" element={<VaultAudit />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Box>

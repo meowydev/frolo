@@ -140,7 +140,77 @@ export const api = {
   entitlements: () => request<Entitlements>("GET", "/api/license/entitlements"),
   deviceCode: () => request<{ code: string }>("GET", "/api/license/device-code"),
   installLicense: (license: string) => request<Entitlements>("POST", "/api/license/install", { license }),
+
+  // --- real-mode connections + runtime ---
+  runtime: () => request<RuntimeInfo>("GET", "/api/runtime"),
+  listConnections: () => request<{ connections: ProxmoxConnectionDto[] }>("GET", "/api/connections"),
+  saveConnection: (input: SaveConnectionInput) =>
+    request<{ connection: ProxmoxConnectionDto; tokenStored: boolean }>("POST", "/api/connections", input),
+  deleteConnection: (id: string) => request<{ ok: true }>("DELETE", `/api/connections/${id}`),
+  fetchFingerprint: (host: string) =>
+    request<{ fingerprint: { fingerprintSha256: string; subject?: string; issuer?: string; validTo?: string } }>(
+      "POST",
+      "/api/connections/fetch-fingerprint",
+      { host },
+    ),
+  validateConnection: (id: string) => request<{ report: unknown }>("POST", `/api/connections/${id}/validate`),
+  selectNode: (id: string, node: string) =>
+    request<{ ok: true; node: string }>("POST", `/api/connections/${id}/select-node`, { node }),
+  enableRealMode: (connectionId: string) =>
+    request<{ ok: true; restartRequired: boolean }>("POST", "/api/runtime/enable-real", { connectionId }),
+  disableRealMode: () => request<{ ok: true; restartRequired: boolean }>("POST", "/api/runtime/disable-real"),
+
+  // --- updater ---
+  updateStatus: () => request<UpdateStatusDto>("GET", "/api/update/status"),
+  updateProgress: () => request<UpdateProgressDto>("GET", "/api/update/progress"),
+  checkForUpdates: () => request<UpdateStatusDto>("POST", "/api/update/check"),
+  applyUpdate: (tag: string) =>
+    request<{ ok: boolean; tag?: string; error?: string; rolledBack?: boolean }>("POST", "/api/update/apply", { tag }),
 };
+
+export interface RuntimeInfo {
+  effectiveMode: "mock" | "real";
+  desiredMode: "mock" | "real";
+  activeConnectionId: string | null;
+  realModeReady: boolean;
+  realModeReason: string;
+}
+export interface ProxmoxConnectionDto {
+  id: string;
+  name: string;
+  host: string;
+  node: string;
+  tokenId: string;
+  certFingerprint?: string;
+  pinned: boolean;
+  createdAt: string;
+}
+export interface SaveConnectionInput {
+  id?: string;
+  name: string;
+  host: string;
+  node: string;
+  tokenId: string;
+  tokenSecret?: string;
+  certFingerprint?: string;
+  pinned?: boolean;
+}
+export interface UpdateStatusDto {
+  managedExternally: boolean;
+  reason?: string;
+  currentVersion?: string;
+  latest?: { tag: string; name: string; publishedAt: string; prerelease: boolean; body?: string };
+  updateAvailable?: boolean;
+  channel?: "stable" | "prerelease";
+  lastCheckedAt?: string;
+  lastError?: string;
+}
+export interface UpdateProgressDto {
+  phase: string;
+  message: string;
+  tag?: string;
+  at: string;
+}
 
 // Subscribe to live deployment events over SSE. Returns an unsubscribe fn.
 export function subscribeEvents(onEvent: (e: FroloUiEvent) => void): () => void {

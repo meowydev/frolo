@@ -1,6 +1,6 @@
-<!-- Screenshot placeholder: replace with a real OOBE/dashboard screenshot before publishing. -->
+<!-- Illustrative placeholder (committed SVG). Replace with a real OOBE/dashboard capture before publishing. -->
 <p align="center">
-  <img src="docs/screenshots/hero.png" alt="Frolo — self-hosted Proxmox deployment panel" width="820" />
+  <img src="docs/screenshots/hero.svg" alt="Frolo — self-hosted Proxmox deployment panel" width="820" />
 </p>
 
 # Frolo
@@ -47,6 +47,11 @@ everything before connecting real infrastructure.
   asks you to repair the step instead of guessing.
 - **Router chains** (e.g. Internet → modem → Keenetic → Archer C6U → VM) with a
   full review screen and innermost-out apply / reverse-order teardown.
+- A **Settings** screen to manage real Proxmox connections (add, review a pinned
+  TLS fingerprint, read-only validate, enable/disable real mode) and to check for
+  and install **source-based software updates** (tagged, checksum-verified,
+  transactional with automatic rollback). The browser only ever talks to the
+  local controller — never to Proxmox, SSH, SQLite, the vault, or routers.
 
 ## First run (OOBE)
 
@@ -76,7 +81,8 @@ OOBE never shows again unless you reset setup from the VM terminal.
 The supported beta install path is Docker via the installer:
 
 ```bash
-curl -fsSLO https://example/frolo/install.sh   # or copy install/install.sh onto the VM
+# Download the installer from the GitHub release, or copy install/install.sh onto the VM.
+curl -fsSLO https://github.com/meowydev/frolo/releases/latest/download/install.sh
 sudo bash install.sh
 # → Frolo is ready at http://<detected-ip>:4512
 ```
@@ -87,7 +93,8 @@ pulls the pinned release image, starts it, waits for the health check, and print
 the panel address. It is safe to rerun and provides more commands:
 
 ```bash
-sudo bash install.sh update                 # pull the pinned release + restart
+sudo bash install.sh update                 # re-pull the pinned image + restart
+sudo bash install.sh update <tag>           # fetch a checksum-verified release bundle + restart
 sudo bash install.sh backup frolo.tar.gz    # back up the data volume
 sudo bash install.sh restore frolo.tar.gz   # restore the data volume
 ./install.sh diagnostics                     # environment + health info

@@ -29,6 +29,9 @@ release/
 *.pem
 *.key
 
+# Private hosted service (keep this in a separate private repository)
+/frolo-server/
+
 # Editors and operating systems
 .DS_Store
 .idea/

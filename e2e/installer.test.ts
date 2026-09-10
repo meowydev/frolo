@@ -59,4 +59,38 @@ describe("install.sh safety", () => {
     expect(script).not.toMatch(/PRIVATE KEY/);
     expect(script).not.toMatch(/signing[_-]?key/i);
   });
+
+  it("uses the real meowydev/frolo repo and image (no placeholder org)", () => {
+    expect(script).not.toMatch(/meowerity/);
+    expect(script).toMatch(/ghcr\.io\/meowydev\/frolo/);
+    expect(script).toMatch(/meowydev\/frolo/);
+  });
+
+  it("update <tag> fetches a checksum-verified release bundle before restart", () => {
+    // The tagged-update path downloads the bundle + checksums and verifies them.
+    expect(script).toMatch(/\/releases/);
+    expect(script).toMatch(/\/download\/\$\{tag\}/);
+    expect(script).toMatch(/SHA256SUMS\.txt/);
+    expect(script).toMatch(/shasum -a 256 -c/);
+    // Refuses to proceed if verification fails.
+    expect(script).toMatch(/Checksum verification failed/);
+  });
+});
+
+describe("release artifacts + compose", () => {
+  const compose = readFileSync(join(root, "docker-compose.yml"), "utf8");
+  const buildRelease = readFileSync(join(root, "scripts/build-release.sh"), "utf8");
+
+  it("compose + build-release reference meowydev/frolo (no placeholder org)", () => {
+    expect(compose).not.toMatch(/meowerity/);
+    expect(compose).toMatch(/ghcr\.io\/meowydev\/frolo/);
+    expect(buildRelease).not.toMatch(/meowerity/);
+    expect(buildRelease).toMatch(/ghcr\.io\/meowydev\/frolo/);
+  });
+
+  it("build-release publishes a checksum-verified source archive for the updater", () => {
+    expect(buildRelease).toMatch(/frolo-\$\{VERSION\}\.tar\.gz/);
+    expect(buildRelease).toMatch(/SHA256SUMS\.txt/);
+    expect(buildRelease).toMatch(/git archive/);
+  });
 });

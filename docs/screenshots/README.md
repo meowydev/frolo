@@ -1,13 +1,17 @@
 # Screenshots
 
-These are **placeholders**. Replace them with real captures of the web panel
-before publishing. The README references `hero.png`.
+The README currently uses `hero.svg`, a committed **illustrative placeholder**
+(vector, so it renders in the README without a broken link). Real captures still
+require running the panel in a browser, which can't be done in CI; replace the
+placeholder with real captures before publishing.
 
 Suggested captures (use **Try Frolo safely** / mock mode — never show real
 Proxmox hosts, router UIs, IPs, or credentials):
 
 - `hero.png` — the dashboard with the "Simulated infrastructure (mock)" chip and
-  the beta label.
+  the beta label (then point the README at `hero.png` instead of `hero.svg`).
+- `settings.png` — the Settings screen: real Proxmox connections + software
+  updates cards.
 - `oobe-welcome.png` — the OOBE welcome step.
 - `oobe-mode.png` — the mode step ("Try Frolo safely" vs "Connect my Proxmox").
 - `oobe-recovery.png` — the vault recovery-code step (blur/redact the code).

@@ -142,6 +142,19 @@ CREATE INDEX IF NOT EXISTS idx_operation_dep ON operation(deployment_id);
 CREATE INDEX IF NOT EXISTS idx_mapping_dep ON mapping_record(deployment_id, hop_index);
 `,
   },
+  {
+    id: 2,
+    sql: `
+-- Single-row runtime configuration (active mode + selected connection). Adding
+-- this in a new migration preserves data compatibility with existing installs.
+CREATE TABLE IF NOT EXISTS runtime_config (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  mode TEXT NOT NULL DEFAULT 'mock',
+  active_connection_id TEXT,
+  updated_at TEXT NOT NULL
+);
+`,
+  },
 ];
 
 // Column names that would indicate a secret leaked into SQLite. A test asserts

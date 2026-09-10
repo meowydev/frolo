@@ -49,9 +49,11 @@ and Frolo tells you exactly that and how to renew.
 
 ## Security of the model
 
-- The desktop app contains only the **public** key. The private signing key lives
-  only in a separate, closed-source service (see
+- The Frolo app (local controller + panel) contains only the **public** key. The
+  private signing key lives only in the separate private `frolo-server` (see
   [PRIVATE_SERVICE_BOUNDARY.md](PRIVATE_SERVICE_BOUNDARY.md)).
+- Development "dev-fake" licenses are refused by production builds; the dev issuer
+  and dev CLI are disabled unless `FROLO_DEV=1` is set for local development.
 - Because distributed client code can be inspected, entitlement authenticity is
   protected by **signatures**, not obfuscation.
 - Production builds refuse `development`-environment keys, so dev-fake licenses

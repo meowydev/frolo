@@ -13,9 +13,18 @@ const HOST = process.env.FROLO_HOST ?? "0.0.0.0"; // LAN by default
 const DATA_DIR = process.env.FROLO_DATA_DIR ?? "/opt/frolo/data";
 const BEHIND_TLS = process.env.FROLO_BEHIND_TLS === "1";
 const WEB_ROOT = process.env.FROLO_WEB_ROOT; // set by the container image
+// Source-deployment release root enables the in-app source-based updater.
+// Unset for Docker (updates by pulling a new image tag) and for dev.
+const RELEASE_ROOT = process.env.FROLO_RELEASE_ROOT;
+const ALLOW_PRERELEASE = process.env.FROLO_UPDATE_PRERELEASE === "1";
 
 async function main(): Promise<void> {
-  const ctx = await buildContext({ dataDir: DATA_DIR });
+  const ctx = await buildContext({
+    dataDir: DATA_DIR,
+    version: FROLO_VERSION,
+    releaseRoot: RELEASE_ROOT,
+    allowPrerelease: ALLOW_PRERELEASE,
+  });
 
   // Reconcile any operations left unresolved by a prior crash.
   await ctx.controller.reconcileOnStartup();

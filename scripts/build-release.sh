@@ -13,7 +13,7 @@
 set -euo pipefail
 
 VERSION="${FROLO_VERSION:-0.1.0-beta.1}"
-IMAGE="${FROLO_IMAGE:-ghcr.io/meowerity/frolo}"
+IMAGE="${FROLO_IMAGE:-ghcr.io/meowydev/frolo}"
 OUT="release/${VERSION}"
 PLATFORMS="linux/amd64,linux/arm64"
 
@@ -35,16 +35,38 @@ else
 fi
 
 # 2) Deploy bundle: compose + installer, pinned to this version.
-sed "s#\${FROLO_IMAGE:-ghcr.io/meowerity/frolo:0.1.0-beta.1}#${IMAGE}:${VERSION}#" \
+sed "s#\${FROLO_IMAGE:-ghcr.io/meowydev/frolo:0.1.0-beta.1}#${IMAGE}:${VERSION}#" \
   docker-compose.yml > "${OUT}/docker-compose.yml"
 cp install/install.sh "${OUT}/install.sh"
 chmod +x "${OUT}/install.sh"
 
-# 3) Checksums for the shipped files.
-( cd "${OUT}" && shasum -a 256 docker-compose.yml install.sh > SHA256SUMS.txt )
+# 3) Source archive for the source-based updater (packages/server updater.ts).
+#    The updater downloads the tag tarball and verifies it against SHA256SUMS.
+#    We produce a matching `frolo-<version>.tar.gz` from a clean git archive so
+#    the published checksum lines up with what GitHub serves for the tag.
+SRC_TARBALL="frolo-${VERSION}.tar.gz"
+if git -C . rev-parse >/dev/null 2>&1; then
+  echo "Creating source archive ${SRC_TARBALL} from git…"
+  git archive --format=tar.gz --prefix="frolo-${VERSION}/" -o "${OUT}/${SRC_TARBALL}" HEAD
+else
+  echo "Not a git checkout — skipping source archive (CI builds it from the tag)." >&2
+fi
+
+# 4) Checksums for ALL shipped files, including the source archive. The updater's
+#    SHA256SUMS parser matches the <version> tar.gz entry.
+(
+  cd "${OUT}"
+  files=(docker-compose.yml install.sh)
+  [ -f "${SRC_TARBALL}" ] && files+=("${SRC_TARBALL}")
+  shasum -a 256 "${files[@]}" > SHA256SUMS.txt
+)
 
 echo "Artifacts written to ${OUT}:"
 ls -la "${OUT}"
 echo
+echo "Publishing (CI): upload the multi-arch image to ghcr.io/meowydev/frolo and"
+echo "attach docker-compose.yml, install.sh, ${SRC_TARBALL}, and SHA256SUMS.txt to"
+echo "the GitHub release for tag ${VERSION} at github.com/meowydev/frolo."
+echo
 echo "NOTE: .deb packaging is tracked as a later task (see docs). The supported"
-echo "beta install path is Docker via install.sh."
+echo "beta install paths are Docker via install.sh and source via frolo-update."

@@ -2,7 +2,8 @@
 # Frolo installer for Debian/Ubuntu (amd64 + arm64). Safe to rerun.
 #
 #   sudo ./install.sh                  # install (or update in place)
-#   sudo ./install.sh update           # pull the pinned release + restart
+#   sudo ./install.sh update           # re-pull the pinned image + restart
+#   sudo ./install.sh update <tag>     # fetch verified release bundle + restart
 #   sudo ./install.sh uninstall        # remove Frolo, KEEP data
 #   sudo ./install.sh uninstall --remove-data   # ALSO delete persistent data
 #   sudo ./install.sh backup [file]    # back up the data volume to a tarball
@@ -16,7 +17,10 @@
 set -euo pipefail
 
 FROLO_VERSION="0.1.0-beta.1"
-FROLO_IMAGE="${FROLO_IMAGE:-ghcr.io/meowerity/frolo:${FROLO_VERSION}}"
+FROLO_IMAGE="${FROLO_IMAGE:-ghcr.io/meowydev/frolo:${FROLO_VERSION}}"
+# GitHub repository used for release artifacts (compose bundle + checksums).
+FROLO_REPO="${FROLO_REPO:-meowydev/frolo}"
+FROLO_RELEASE_BASE="${FROLO_RELEASE_BASE:-https://github.com/${FROLO_REPO}/releases}"
 FROLO_DIR="/opt/frolo"
 DATA_DIR="${FROLO_DIR}/data"
 COMPOSE_FILE="${FROLO_DIR}/docker-compose.yml"
@@ -160,10 +164,41 @@ cmd_install() {
   fi
 }
 
+# Fetch the pinned compose bundle + checksums for a specific release tag from
+# GitHub and verify the checksum before using it. Falls back to the in-repo
+# compose if a tag is not requested (offline / local builds).
+fetch_release_bundle() {
+  local tag="$1"
+  local base="${FROLO_RELEASE_BASE}/download/${tag}"
+  local tmp; tmp="$(mktemp -d)"
+  log "Downloading release bundle for ${tag} from ${base}…"
+  if ! curl -fsSL "${base}/docker-compose.yml" -o "${tmp}/docker-compose.yml"; then
+    warn "Could not download docker-compose.yml for ${tag}. Keeping the current bundle."
+    rm -rf "${tmp}"; return 1
+  fi
+  if curl -fsSL "${base}/SHA256SUMS.txt" -o "${tmp}/SHA256SUMS.txt"; then
+    log "Verifying checksum…"
+    ( cd "${tmp}" && grep " docker-compose.yml$" SHA256SUMS.txt | shasum -a 256 -c - ) \
+      || { err "Checksum verification failed for ${tag}. Aborting update."; rm -rf "${tmp}"; return 1; }
+  else
+    warn "No SHA256SUMS.txt published for ${tag}; cannot verify the bundle. Aborting for safety."
+    rm -rf "${tmp}"; return 1
+  fi
+  cp "${tmp}/docker-compose.yml" "${COMPOSE_FILE}"
+  rm -rf "${tmp}"
+  log "Installed verified compose bundle for ${tag}."
+}
+
 cmd_update() {
   require_root
   ensure_docker
   [ -f "$COMPOSE_FILE" ] || die "Frolo is not installed (no ${COMPOSE_FILE})."
+  # `update <tag>` pulls the pinned, checksum-verified release bundle from GitHub;
+  # `update` alone just re-pulls the currently-pinned image.
+  local tag="${1:-}"
+  if [ -n "$tag" ]; then
+    fetch_release_bundle "$tag" || die "Update to ${tag} aborted."
+  fi
   log "Updating to ${FROLO_IMAGE}…"
   compose pull
   compose up -d
@@ -212,6 +247,7 @@ cmd_diagnostics() {
   echo "── Frolo diagnostics ──"
   echo "version (installer): ${FROLO_VERSION}"
   echo "image:               ${FROLO_IMAGE}"
+  echo "repo:                ${FROLO_REPO}"
   echo "arch:                $(uname -m)"
   if [ -f /etc/os-release ]; then . /etc/os-release; echo "os:                  ${PRETTY_NAME:-unknown}"; fi
   echo -n "docker:              "; command -v docker >/dev/null 2>&1 && docker --version || echo "not installed"
@@ -230,7 +266,9 @@ Frolo installer (${FROLO_VERSION})
 Usage: $0 [command]
 
   (no command)            Install or update Frolo in place
-  update                  Pull the pinned release and restart
+  update                  Re-pull the currently pinned image and restart
+  update <tag>            Fetch the checksum-verified release bundle for <tag>
+                          from github.com/${FROLO_REPO} and restart
   uninstall               Remove Frolo, keep data
   uninstall --remove-data Remove Frolo AND delete persistent data
   backup [file]           Back up the data volume to a tarball
@@ -243,7 +281,7 @@ main() {
   local cmd="${1:-install}"
   case "$cmd" in
     install) cmd_install ;;
-    update) cmd_update ;;
+    update) shift || true; cmd_update "${1:-}" ;;
     uninstall) shift || true; cmd_uninstall "${1:-}" ;;
     backup) shift || true; cmd_backup "${1:-}" ;;
     restore) shift || true; cmd_restore "${1:-}" ;;

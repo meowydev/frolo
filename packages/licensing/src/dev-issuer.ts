@@ -44,9 +44,31 @@ function rawPublicKey(pub: KeyObject): Buffer {
   return der.subarray(der.length - 32);
 }
 
+// Guard: the dev issuer must never run in a production build. It is enabled ONLY
+// when an explicit dev flag is present (FROLO_DEV=1 / FROLO_ALLOW_DEV_LICENSE_KEYS=1)
+// or when NODE_ENV is not "production". Tests may bypass this via
+// createDevIssuer({ force: true }). Production containers set NODE_ENV=production
+// and no dev flag, so any accidental call throws instead of minting a key.
+export function devIssuerAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.FROLO_ALLOW_DEV_LICENSE_KEYS === "1") return true;
+  if (env.FROLO_DEV === "1") return true;
+  return env.NODE_ENV !== "production";
+}
+
+export interface CreateDevIssuerOptions {
+  // Test-only escape hatch to construct the issuer regardless of environment.
+  force?: boolean;
+}
+
 // Create a fresh, ephemeral dev issuer. The private key exists only in memory
 // for the lifetime of the process (tests / local dev). It is never persisted.
-export function createDevIssuer(): DevIssuer {
+export function createDevIssuer(opts: CreateDevIssuerOptions = {}): DevIssuer {
+  if (!opts.force && !devIssuerAllowed()) {
+    throw new Error(
+      "createDevIssuer is disabled in production builds. Dev-fake licenses are refused. " +
+        "Use the private frolo-server issuer for real licenses, or set FROLO_DEV=1 for local development.",
+    );
+  }
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const pub: PublicVerificationKey = {
     keyId: DEV_KEY_ID,

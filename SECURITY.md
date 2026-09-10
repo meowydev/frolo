@@ -50,7 +50,7 @@ Replace sensitive values with obvious placeholders.
 
 Frolo stores infrastructure credentials locally in an encrypted vault. The public Frolo App contains only the public key needed to verify signed licenses. Production license-signing keys and supporter records belong to the separate private Frolo Server.
 
-Frolo should never send Proxmox credentials, router passwords, SSH private keys, or vault recovery codes to Meowerity services.
+Frolo should never send Proxmox credentials, router passwords, SSH private keys, or vault recovery codes to the private frolo-server or any other remote service.
 
 ## Supported versions
 

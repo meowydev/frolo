@@ -71,10 +71,10 @@ the service.
 
 The product is split into two explicit boundaries:
 
-| | **frolo-app** (this repo, public/open) | **frolo-server** (private, Meowerity) |
+| | **frolo-app** (this repo, public/open) | **frolo-server** (private, meowydev) |
 | --- | --- | --- |
 | What | The self-hosted web panel + local controller + deployment engine + local encrypted vault + recipes + license **verifier** + installer + packaging + tests | The hosted service for accounts, Boosty verification, production license **issuance**, signed update manifests, official recipe publishing, notifications, and future hosted features |
-| Runs where | Inside the user's dedicated Linux VM, LAN-only on `:4512` | On Meowerity infrastructure |
+| Runs where | Inside the user's dedicated Linux VM, LAN-only on `:4512` | On private meowydev infrastructure (admin panel on `:2444`) |
 | Keys | Ships only the **public** verification key | Holds the **private** signing key (HSM/secret store) |
 
 ### frolo-server MUST NEVER receive

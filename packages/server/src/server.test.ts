@@ -160,3 +160,66 @@ describe("Frolo server", () => {
     expect(last).toBe(429); // rate limited after too many attempts
   });
 });
+
+describe("license dev-key gating (production default)", () => {
+  afterEach(async () => {
+    await app.close();
+    ctx.close();
+  });
+
+  async function adminJar(): Promise<Record<string, string>> {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/setup/create-admin",
+      payload: { username: "admin", password: "correct horse battery staple" },
+    });
+    return cookies(res);
+  }
+
+  it("refuses a dev-signed license by default (allowDevLicenseKeys unset => false)", async () => {
+    const issuer = createDevIssuer({ force: true });
+    // Build a context WITHOUT allowDevLicenseKeys and without any dev env flag:
+    // the production-safe default must reject the development key.
+    delete process.env.FROLO_DEV;
+    delete process.env.FROLO_ALLOW_DEV_LICENSE_KEYS;
+    ctx = await buildContext({ inMemory: true, dataDir: "/tmp", licenseKeys: [issuer.publicKey] });
+    app = await buildApp(ctx, { secureCookies: false, dataDir: "/tmp", inMemory: true });
+    await app.ready();
+
+    const jar = await adminJar();
+    const lic = issuer.issue({ subject: "d", tier: "powerfullness" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/license/install",
+      headers: { cookie: cookieHeader(jar), "x-frolo-csrf": jar.frolo_csrf },
+      payload: { license: JSON.stringify(lic) },
+    });
+    // Install returns entitlements; the dev key is rejected => effective Home tier.
+    expect(res.statusCode).toBe(200);
+    expect(res.json().effectiveTier).toBe("home");
+    expect(res.json().status.state).toBe("invalid");
+  });
+
+  it("accepts a dev-signed license when explicitly allowed (dev/test)", async () => {
+    const issuer = createDevIssuer({ force: true });
+    ctx = await buildContext({
+      inMemory: true,
+      dataDir: "/tmp",
+      licenseKeys: [issuer.publicKey],
+      allowDevLicenseKeys: true,
+    });
+    app = await buildApp(ctx, { secureCookies: false, dataDir: "/tmp", inMemory: true });
+    await app.ready();
+
+    const jar = await adminJar();
+    const lic = issuer.issue({ subject: "d", tier: "advanced_user" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/license/install",
+      headers: { cookie: cookieHeader(jar), "x-frolo-csrf": jar.frolo_csrf },
+      payload: { license: JSON.stringify(lic) },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().effectiveTier).toBe("advanced_user");
+  });
+});

@@ -688,3 +688,49 @@ Everything privileged runs together on the Frolo VM; the browser is the client.
 - `better-sqlite3` is pinned to v12 (Node 24 compatible); the container uses Node
   22. The store caches prepared statements and the auth tables share the store's
   single connection.
+
+## Addendum B — Real providers, updates, and the private issuer (completed)
+
+Builds on Addendum A. All of the following are implemented and tested with
+controlled transports; no test contacts real infrastructure.
+
+### B.1 Real transports (behind existing provider interfaces)
+- **Proxmox** (`packages/providers-proxmox/https-transport.ts`): `NodeHttpsTransport`
+  over `node:https` with per-connection SHA-256 **certificate pinning**
+  (rejectUnauthorized stays on; when a pin is set the leaf fingerprint must match,
+  else `TlsPinError`). `fetchCertFingerprint(host)` reads the leaf cert for the
+  operator to review/approve.
+- **Guest/SSH** (`packages/providers-guest/ssh2-transport.ts`): `Ssh2Transport`
+  via an optional `ssh2` dependency; TOFU host-key fingerprint capture; command
+  exec + loopback HTTP check. Per-deployment keys resolved from the vault.
+- **Router** (`packages/providers-router/playwright-driver.ts`):
+  `PlaywrightPageDriver` maps the semantic locator model to Playwright; refuses to
+  guess on ambiguous/missing targets; passwords are never stored.
+  `makePlaywrightRouterConfig` uses an optional `playwright` dependency and only
+  relaxes TLS when a router cert is explicitly pinned.
+
+### B.2 Real-mode wiring in the local controller (`packages/server`)
+- The persisted single-row `runtime_config` selects mode + active connection.
+  Real mode is effective only when the readiness gate is open, a connection is
+  configured, and its API token exists in the vault. Providers rebind on restart.
+- Connection API: list/add/delete, fetch-fingerprint (explicit), read-only
+  validate (explicit), select node, enable/disable real mode. Non-secret metadata
+  in SQLite; token secret only in the vault.
+
+### B.3 Source updater (`packages/server/updater.ts` + `frolo-update` CLI + UI)
+- Installs only **tagged** `meowydev/frolo` releases; verifies the source
+  archive's SHA-256 against the release `SHA256SUMS` before extracting; builds
+  locally; atomically swaps a `current` symlink; restarts; health-checks;
+  **auto-rolls back** on failure. Docker installs update by pulling a new tag.
+
+### B.4 Private issuer (`frolo-server/`, separate private repo)
+- Localhost-bound admin panel on **:2444** (strong bearer token, constant-time
+  compare). Holds the production Ed25519 **signing key** and subscriber data.
+  Boosty subscribers, device-code pairing, issuance/revocation, tiers, audit.
+  Emits `SignedLicense` + the public verification key only; the public app
+  verifies offline.
+
+### B.5 Dev-issuer gating
+- `createDevIssuer` and the dev CLI throw in production (NODE_ENV=production and
+  no `FROLO_DEV`/`FROLO_ALLOW_DEV_LICENSE_KEYS`). The controller refuses
+  development-environment keys by default (`allowDevLicenseKeys` defaults false).

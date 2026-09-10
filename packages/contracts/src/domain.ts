@@ -30,6 +30,21 @@ export interface DeploymentTransition {
 }
 
 // ---------------------------------------------------------------------------
+// Proxmox connection (real mode). NON-SECRET metadata only; the API token
+// secret lives exclusively in the vault, keyed by SecretRefs.proxmoxToken(id).
+// ---------------------------------------------------------------------------
+export interface ProxmoxConnection {
+  id: string;
+  name: string;
+  host: string; // e.g. https://pve.example:8006
+  node: string;
+  tokenId: string; // e.g. frolo@pve!deploy  (NOT the secret)
+  certFingerprint?: string; // pinned SHA-256 (self-signed homelab certs)
+  pinned: boolean;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
 // Proxmox inventory (req §3)
 // ---------------------------------------------------------------------------
 export type ProxmoxEntryKind = "qemu-template" | "qemu-vm" | "lxc";
