@@ -39,8 +39,9 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm run build:packages \
  && pnpm --filter @frolo/ui build
 
-# Prune dev dependencies for a smaller runtime node_modules.
-RUN pnpm prune --prod
+# Prune dev dependencies for a smaller runtime node_modules. pnpm requires CI
+# mode before it will replace node_modules in a non-interactive image build.
+RUN CI=true pnpm prune --prod
 
 # ---- Runtime ----
 FROM node:22-bookworm-slim AS runtime
