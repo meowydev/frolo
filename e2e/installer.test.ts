@@ -20,9 +20,9 @@ describe("install.sh safety", () => {
     expect(() => execFileSync("bash", ["-n", installScript])).not.toThrow();
   });
 
-  it("supports amd64 and arm64", () => {
+  it("supports the amd64 beta image and rejects unsupported architectures", () => {
     expect(script).toMatch(/x86_64\|amd64/);
-    expect(script).toMatch(/aarch64\|arm64/);
+    expect(script).toMatch(/this Frolo beta image supports amd64/);
   });
 
   it("is rerun-safe (idempotent create + compose up)", () => {

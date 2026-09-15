@@ -5,9 +5,9 @@ The beta release consists of:
 
 | Artifact | What it is |
 | --- | --- |
-| `ghcr.io/meowydev/frolo:<version>` | Multi-arch container image (**linux/amd64** + **linux/arm64**) running the Fastify server + built web panel |
+| `ghcr.io/meowydev/frolo:<version>` | Beta container image for **linux/amd64** running the Fastify server + built web panel |
 | `docker-compose.yml` | Deploy bundle pinned to the release image, with a persistent data volume + health check |
-| `install.sh` | Installer for Debian/Ubuntu (amd64/arm64): installs/validates Docker, writes `/opt/frolo`, pulls the pinned image, starts it, waits for health, prints the ready URL |
+| `install.sh` | Installer for Debian/Ubuntu (amd64): installs/validates Docker, writes `/opt/frolo`, pulls the pinned image, starts it, waits for health, prints the ready URL |
 | `frolo-<version>.tar.gz` | Source archive consumed by the in-app source updater (`frolo-update`) — checksum-verified before build |
 | `SHA256SUMS.txt` | Checksums for the shipped `docker-compose.yml`, `install.sh`, and source archive |
 
@@ -41,7 +41,7 @@ The workflow never publishes off `main`/`latest`/a branch — only a version tag
 # Local (single arch, loaded into the local Docker):
 FROLO_IMAGE=frolo scripts/build-release.sh --load --platform linux/amd64
 
-# CI (multi-arch, pushed to a registry):
+# CI (amd64 beta image, pushed to a registry):
 scripts/build-release.sh --push
 ```
 

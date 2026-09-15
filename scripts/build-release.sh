@@ -15,7 +15,7 @@ set -euo pipefail
 VERSION="${FROLO_VERSION:-0.1.0-beta.1}"
 IMAGE="${FROLO_IMAGE:-ghcr.io/meowydev/frolo}"
 OUT="release/${VERSION}"
-PLATFORMS="linux/amd64,linux/arm64"
+PLATFORMS="${FROLO_PLATFORMS:-linux/amd64}"
 
 echo "Building Frolo ${VERSION} release artifacts…"
 mkdir -p "${OUT}"

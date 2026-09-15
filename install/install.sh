@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Frolo installer for Debian/Ubuntu (amd64 + arm64). Safe to rerun.
+# Frolo beta installer for Debian/Ubuntu (amd64). Safe to rerun.
 #
 #   sudo ./install.sh                  # install (or update in place)
 #   sudo ./install.sh update           # re-pull the pinned image + restart
@@ -41,8 +41,7 @@ detect_arch() {
   local m; m="$(uname -m)"
   case "$m" in
     x86_64|amd64) echo "amd64" ;;
-    aarch64|arm64) echo "arm64" ;;
-    *) die "Unsupported architecture: $m (Frolo supports amd64 and arm64)." ;;
+    *) die "Unsupported architecture: $m (this Frolo beta image supports amd64)." ;;
   esac
 }
 
