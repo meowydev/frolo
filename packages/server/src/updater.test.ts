@@ -7,8 +7,8 @@ import { createHash } from "node:crypto";
 import {
   SourceUpdater,
   compareVersions,
-  findSourceChecksum,
-  normalizeTag,
+  findChecksumForFile,
+  sourceAssetName,
   type UpdaterIo,
   type UpdaterConfig,
 } from "./updater.js";
@@ -42,8 +42,12 @@ class FakeIo implements UpdaterIo {
     if (!key) throw new Error(`no canned text for ${url}`);
     return this.text[key]!;
   }
+  fetchedUrls: string[] = [];
   async fetchBytes(url: string): Promise<Uint8Array> {
-    const key = Object.keys(this.bytes).find((k) => url.includes(k));
+    this.fetchedUrls.push(url);
+    const key = Object.keys(this.bytes)
+      .filter((k) => url.includes(k))
+      .sort((a, b) => b.length - a.length)[0];
     if (!key) throw new Error(`no canned bytes for ${url}`);
     return this.bytes[key]!;
   }
@@ -88,18 +92,25 @@ const cfg: UpdaterConfig = {
   healthTimeoutMs: 1000,
 };
 
+// Seed a release that attaches the NAMED source asset frolo-<version>.tar.gz
+// (the artifact the checksums cover) plus a SHA256SUMS.txt asset. The auto
+// tarball_url points at DIFFERENT bytes to prove the updater never uses it.
 function seedRelease(io: FakeIo, tag: string, archive: Uint8Array, opts: { prerelease?: boolean } = {}) {
-  const checksums = `${sha256hex(archive)}  frolo-${normalizeTag(tag)}.tar.gz\n`;
-  io.text["SHA256SUMS"] = checksums;
-  io.bytes["tarball"] = archive;
+  const assetName = sourceAssetName(tag); // frolo-<version>.tar.gz
+  io.text["SHA256SUMS.txt"] = `${sha256hex(archive)} *${assetName}\n`;
+  io.bytes["/asset/source"] = archive; // the named source asset
+  io.bytes["/tarball"] = new Uint8Array([0xde, 0xad, 0xbe, 0xef]); // the auto tarball (WRONG)
   const release = {
     tag_name: tag,
     name: tag,
     published_at: "2026-01-01T00:00:00Z",
     prerelease: Boolean(opts.prerelease),
     draft: false,
-    tarball_url: "https://api.github.com/tarball",
-    assets: [{ name: "SHA256SUMS", browser_download_url: "https://example/SHA256SUMS" }],
+    tarball_url: "https://api.github.com/repos/meowydev/frolo/tarball/" + tag,
+    assets: [
+      { name: assetName, browser_download_url: "https://example/download/asset/source" },
+      { name: "SHA256SUMS.txt", browser_download_url: "https://example/download/SHA256SUMS.txt" },
+    ],
   };
   io.json["/releases"] = [release];
   io.json[`/releases/tags/${tag}`] = release;
@@ -115,13 +126,18 @@ describe("version comparison", () => {
   });
 });
 
-describe("findSourceChecksum", () => {
-  it("finds the tag tarball checksum", () => {
-    const sums = "aa".repeat(32) + "  frolo-0.1.0-beta.2.tar.gz\n" + "bb".repeat(32) + "  other.zip";
-    expect(findSourceChecksum(sums, "0.1.0-beta.2")).toBe("aa".repeat(32));
+describe("findChecksumForFile", () => {
+  it("finds the checksum for the exact named asset (coreutils '*' binary mode tolerated)", () => {
+    const sums =
+      "aa".repeat(32) + " *frolo-0.1.0-beta.2.tar.gz\n" + "bb".repeat(32) + "  docker-compose.yml";
+    expect(findChecksumForFile(sums, "frolo-0.1.0-beta.2.tar.gz")).toBe("aa".repeat(32));
   });
-  it("returns null when there is no tar.gz entry", () => {
-    expect(findSourceChecksum("bb".repeat(32) + "  frolo.zip", "1.0.0")).toBeNull();
+  it("matches on basename so ./path/frolo-x.tar.gz resolves", () => {
+    const sums = "cc".repeat(32) + "  ./dist/frolo-1.0.0.tar.gz";
+    expect(findChecksumForFile(sums, "frolo-1.0.0.tar.gz")).toBe("cc".repeat(32));
+  });
+  it("returns null when the file is not listed", () => {
+    expect(findChecksumForFile("bb".repeat(32) + "  other.zip", "frolo-1.0.0.tar.gz")).toBeNull();
   });
 });
 
@@ -161,12 +177,45 @@ describe("SourceUpdater.applyUpdate", () => {
     const io = new FakeIo();
     const archive = new Uint8Array([9, 9, 9]);
     seedRelease(io, "0.1.0-beta.2", archive);
-    io.text["SHA256SUMS"] = "00".repeat(32) + "  frolo-0.1.0-beta.2.tar.gz"; // wrong
+    io.text["SHA256SUMS.txt"] = "00".repeat(32) + " *frolo-0.1.0-beta.2.tar.gz"; // wrong
     const up = new SourceUpdater(cfg, io);
     const res = await up.applyUpdate("0.1.0-beta.2");
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/checksum mismatch/i);
     expect(io.steps.filter((s) => s.startsWith("extract"))).toHaveLength(0);
+  });
+
+  it("downloads the NAMED source asset, never the auto-generated tag tarball", async () => {
+    const io = new FakeIo();
+    const archive = new Uint8Array([1, 2, 3, 4]);
+    seedRelease(io, "0.1.0-beta.2", archive);
+    io.healthResults = [true];
+    const up = new SourceUpdater(cfg, io);
+    const res = await up.applyUpdate("0.1.0-beta.2");
+    expect(res.ok).toBe(true);
+    // It fetched the named asset URL and did NOT fetch the GitHub tarball URL.
+    expect(io.fetchedUrls.some((u) => u.includes("/asset/source"))).toBe(true);
+    expect(io.fetchedUrls.some((u) => u.includes("/tarball"))).toBe(false);
+  });
+
+  it("refuses when the release attaches no source asset (auto tarball is unverifiable)", async () => {
+    const io = new FakeIo();
+    const release = {
+      tag_name: "0.1.0-beta.2",
+      name: "0.1.0-beta.2",
+      draft: false,
+      prerelease: false,
+      tarball_url: "https://api.github.com/repos/meowydev/frolo/tarball/0.1.0-beta.2",
+      // Only a checksums file, NO frolo-*.tar.gz asset.
+      assets: [{ name: "SHA256SUMS.txt", browser_download_url: "https://example/SHA256SUMS.txt" }],
+    };
+    io.json["/releases"] = [release];
+    io.json["/releases/tags/0.1.0-beta.2"] = release;
+    io.text["SHA256SUMS.txt"] = "aa".repeat(32) + " *frolo-0.1.0-beta.2.tar.gz";
+    const up = new SourceUpdater(cfg, io);
+    const res = await up.applyUpdate("0.1.0-beta.2");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/does not attach a source asset/i);
   });
 
   it("installs transactionally: extract -> build -> swap -> restart -> health", async () => {

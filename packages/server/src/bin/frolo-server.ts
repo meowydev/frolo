@@ -7,6 +7,7 @@
 import { networkInterfaces } from "node:os";
 import { buildContext } from "../context.js";
 import { buildApp, FROLO_VERSION } from "../app.js";
+import { loadPublicLicenseKeys } from "../license-keys.js";
 
 const PORT = Number(process.env.FROLO_PORT ?? 4512);
 const HOST = process.env.FROLO_HOST ?? "0.0.0.0"; // LAN by default
@@ -19,11 +20,20 @@ const RELEASE_ROOT = process.env.FROLO_RELEASE_ROOT;
 const ALLOW_PRERELEASE = process.env.FROLO_UPDATE_PRERELEASE === "1";
 
 async function main(): Promise<void> {
+  // Load production PUBLIC license verification keys (fail safe to Home tier).
+  const license = loadPublicLicenseKeys();
+  for (const w of license.warnings) process.stdout.write(`[license] ${w}\n`);
+  if (license.keys.length > 0) {
+    const ids = license.keys.map((k) => `${k.keyId} (${k.environment})`).join(", ");
+    process.stdout.write(`[license] loaded ${license.keys.length} public key(s) from ${license.source}: ${ids}\n`);
+  }
+
   const ctx = await buildContext({
     dataDir: DATA_DIR,
     version: FROLO_VERSION,
     releaseRoot: RELEASE_ROOT,
     allowPrerelease: ALLOW_PRERELEASE,
+    licenseKeys: license.keys,
   });
 
   // Reconcile any operations left unresolved by a prior crash.

@@ -8,8 +8,11 @@ class FakeSsh implements SshTransport {
   presentedFp = "SHA256:server-key";
   files = new Map<string, string>();
   nginxRunning = false;
+  connected = false;
+  closeCount = 0;
 
   async connect(): Promise<{ presentedHostKeyFingerprint: string }> {
+    this.connected = true;
     return { presentedHostKeyFingerprint: this.presentedFp };
   }
   async exec(command: string): Promise<SshResult> {
@@ -20,7 +23,10 @@ class FakeSsh implements SshTransport {
   async httpGet(_path: string): Promise<{ status: number; body: string }> {
     return this.nginxRunning ? { status: 200, body: "FROLO-OK-x" } : { status: 502, body: "" };
   }
-  async close(): Promise<void> {}
+  async close(): Promise<void> {
+    this.closeCount += 1;
+    this.connected = false;
+  }
 }
 
 const target: GuestTarget = {
@@ -53,10 +59,23 @@ describe("RealGuestProvider (fake SSH, no sockets)", () => {
     expect(res.status).toBe(200);
   });
 
-  it("enforces TOFU host-key verification", async () => {
+  it("enforces TOFU host-key verification and closes the connection on mismatch", async () => {
     const ssh = new FakeSsh();
     ssh.presentedFp = "SHA256:DIFFERENT";
     const p = providerWith(ssh);
     await expect(p.waitReachable(target, 1000)).rejects.toThrow(HostKeyMismatch);
+    // The freshly-opened connection must be closed even though we fail closed.
+    expect(ssh.closeCount).toBe(1);
+    expect(ssh.connected).toBe(false);
+  });
+
+  it("dispose() closes the underlying SSH connection", async () => {
+    const ssh = new FakeSsh();
+    const p = providerWith(ssh);
+    await p.waitReachable(target, 1000);
+    expect(ssh.connected).toBe(true);
+    await p.dispose();
+    expect(ssh.closeCount).toBe(1);
+    expect(ssh.connected).toBe(false);
   });
 });

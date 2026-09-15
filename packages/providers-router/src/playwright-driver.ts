@@ -54,8 +54,18 @@ interface PwBrowser {
   close(): Promise<void>;
 }
 
+// The shape we need from the `playwright` module.
+export interface PlaywrightModule {
+  chromium?: { launch(o?: Record<string, unknown>): Promise<PwBrowser> };
+  default?: { chromium?: { launch(o?: Record<string, unknown>): Promise<PwBrowser> } };
+}
+
 export interface PlaywrightOptions {
   headless?: boolean; // false for visible Teach Mode recording
+  // Injectable module loader (defaults to a dynamic import of "playwright").
+  // Tests supply a fake to exercise the missing-dependency path without a real
+  // browser; production uses the default dynamic import (optional dep pattern).
+  loadPlaywright?: () => Promise<PlaywrightModule>;
 }
 
 export class PlaywrightPageDriver implements PageDriver {
@@ -167,11 +177,34 @@ export class PlaywrightPageDriver implements PageDriver {
 export function makePlaywrightRouterConfig(opts: PlaywrightOptions = {}): RealRouterConfig {
   return {
     async openDriver(routerUrl: string, trust: RouterTrust): Promise<PageDriver> {
-      const specifier = "playwright";
-      const pw = (await import(specifier)) as unknown as {
-        chromium: { launch(o?: Record<string, unknown>): Promise<PwBrowser> };
-      };
-      const browser = await pw.chromium.launch({ headless: opts.headless ?? true });
+      const load =
+        opts.loadPlaywright ??
+        (() => {
+          const specifier = "playwright";
+          return import(specifier) as Promise<PlaywrightModule>;
+        });
+      let pwMod: PlaywrightModule;
+      try {
+        pwMod = await load();
+      } catch (err) {
+        // The optional dependency isn't installed / can't be loaded. Surface a
+        // clear, actionable error instead of a cryptic module-resolution stack.
+        throw new Error(
+          "router automation requires the optional 'playwright' dependency, which is not available: " +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
+      // `chromium` is a named ESM export, but under CJS interop it can live on
+      // `default`. Accept either so the driver works regardless of how the
+      // module gets resolved at runtime.
+      const chromium = pwMod.chromium ?? pwMod.default?.chromium;
+      if (!chromium) throw new Error("playwright is installed but its chromium export is unavailable");
+      const browser = await chromium.launch({
+        headless: opts.headless ?? true,
+        // Containers usually run without user namespaces; the sandbox needs them.
+        // Frolo only ever navigates the operator's own trusted router UI.
+        args: ["--no-sandbox", "--disable-dev-shm-usage"],
+      });
       // Only ignore HTTPS errors when the user has pinned a fingerprint for this
       // router (self-signed homelab UIs). Otherwise keep TLS validation on.
       const context = await browser.newContext({

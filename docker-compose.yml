@@ -20,8 +20,31 @@ services:
       # Set to 1 only when Frolo runs behind an HTTPS reverse proxy.
       FROLO_BEHIND_TLS: "${FROLO_BEHIND_TLS:-0}"
       FROLO_ALLOWED_ORIGINS: "${FROLO_ALLOWED_ORIGINS:-}"
+
+      # --- Real mode (OFF by default) ---------------------------------------
+      # Real Proxmox/SSH/router automation stays disabled unless BOTH of these
+      # are 1 AND an operator has configured + selected a Proxmox connection in
+      # the panel (Settings). With them unset, Frolo runs entirely in mock mode
+      # and never contacts real infrastructure. See docs/DEPLOYMENT.md.
+      FROLO_ENABLE_REAL_MODE: "${FROLO_ENABLE_REAL_MODE:-0}"
+      FROLO_REAL_SAFETY_TESTS_PASSED: "${FROLO_REAL_SAFETY_TESTS_PASSED:-0}"
+      # Chromium location baked into the image (router Teach Mode / replay).
+      PLAYWRIGHT_BROWSERS_PATH: "/opt/frolo/pw-browsers"
+
+      # --- Production licensing (public key only) ---------------------------
+      # Provide production Ed25519 PUBLIC verification keys as inline JSON, or
+      # mount a file and set FROLO_LICENSE_KEYS_FILE (see the volumes note
+      # below). NEVER put a private signing key here. With neither set, Frolo
+      # runs on the free Home tier.
+      FROLO_LICENSE_KEYS: "${FROLO_LICENSE_KEYS:-}"
+      FROLO_LICENSE_KEYS_FILE: "${FROLO_LICENSE_KEYS_FILE:-}"
     volumes:
       - frolo-data:/opt/frolo/data
+      # Optional: mount a directory holding your production public license keys
+      # (read-only) and point FROLO_LICENSE_KEYS_FILE at a file inside it, e.g.
+      #   FROLO_LICENSE_KEYS_FILE=/opt/frolo/license/keys.json
+      # Uncomment and adjust the host path to use it:
+      # - ${FROLO_LICENSE_DIR:-./license}:/opt/frolo/license:ro
     # Give the server time to flush on stop (graceful shutdown).
     stop_grace_period: 20s
     healthcheck:

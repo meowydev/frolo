@@ -41,12 +41,15 @@ cp install/install.sh "${OUT}/install.sh"
 chmod +x "${OUT}/install.sh"
 
 # 3) Source archive for the source-based updater (packages/server updater.ts).
-#    The updater downloads the tag tarball and verifies it against SHA256SUMS.
-#    We produce a matching `frolo-<version>.tar.gz` from a clean git archive so
-#    the published checksum lines up with what GitHub serves for the tag.
+#    IMPORTANT: the updater downloads THIS EXACT named release asset
+#    (frolo-<version>.tar.gz) and verifies it against SHA256SUMS.txt — it never
+#    uses GitHub's auto-generated tag tarball, whose bytes differ. We build it
+#    from a clean `git archive` of the tagged commit so the bytes (and therefore
+#    the checksum) are reproducible: attach both this file and SHA256SUMS.txt to
+#    the GitHub release so `frolo-update` can fetch and verify them.
 SRC_TARBALL="frolo-${VERSION}.tar.gz"
 if git -C . rev-parse >/dev/null 2>&1; then
-  echo "Creating source archive ${SRC_TARBALL} from git…"
+  echo "Creating source archive ${SRC_TARBALL} from git (prefix frolo-${VERSION}/)…"
   git archive --format=tar.gz --prefix="frolo-${VERSION}/" -o "${OUT}/${SRC_TARBALL}" HEAD
 else
   echo "Not a git checkout — skipping source archive (CI builds it from the tag)." >&2

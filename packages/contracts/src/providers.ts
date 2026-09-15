@@ -73,6 +73,10 @@ export interface GuestProvider {
     target: GuestTarget,
     path: string,
   ): Promise<{ status: number; body: string }>;
+  // Release any open connection (e.g. the real SSH channel). Optional so mock
+  // providers need not implement it. Called by the orchestrator when a
+  // deployment attempt finishes, on both success and failure paths.
+  dispose?(): Promise<void>;
 }
 
 // --- Router ----------------------------------------------------------------

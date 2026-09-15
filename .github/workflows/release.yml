@@ -1,0 +1,108 @@
+# Release: triggered ONLY by pushing an explicit semantic-version tag
+# (e.g. v0.1.0-beta.2). Builds and publishes multi-arch images to GHCR and
+# attaches the deploy bundle + the exact source archive the updater verifies.
+#
+# The source archive (frolo-<version>.tar.gz) is produced with `git archive`
+# from the tagged commit, and SHA256SUMS.txt covers it — this is the SAME file
+# the in-app source updater downloads and checksum-verifies. Never publish an
+# image or assets off `main`/`latest`; this workflow only runs on a version tag.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: write # create the GitHub Release + upload assets
+  packages: write # push images to GHCR
+
+env:
+  IMAGE: ghcr.io/meowydev/frolo
+
+jobs:
+  ci:
+    # Reuse the full CI gate so we never release something that doesn't pass.
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need the tag object + full history for git archive
+
+      - name: Derive version from tag
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push multi-arch image (amd64 + arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.ver.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build release assets (source archive + compose + install.sh + SHA256SUMS)
+        run: |
+          set -euo pipefail
+          OUT="release/${{ steps.ver.outputs.version }}"
+          mkdir -p "$OUT"
+          # Deploy bundle pinned to the released image version.
+          sed "s#\${FROLO_IMAGE:-ghcr.io/meowydev/frolo:0.1.0-beta.1}#${IMAGE}:${{ steps.ver.outputs.version }}#" \
+            docker-compose.yml > "$OUT/docker-compose.yml"
+          cp install/install.sh "$OUT/install.sh"
+          chmod +x "$OUT/install.sh"
+          # The EXACT source asset the updater downloads + verifies. Reproducible
+          # bytes from the tagged commit so its checksum is stable.
+          SRC="frolo-${{ steps.ver.outputs.version }}.tar.gz"
+          git archive --format=tar.gz \
+            --prefix="frolo-${{ steps.ver.outputs.version }}/" \
+            -o "$OUT/$SRC" "${{ steps.ver.outputs.tag }}"
+          ( cd "$OUT" && sha256sum docker-compose.yml install.sh "$SRC" > SHA256SUMS.txt )
+          echo "Artifacts:"; ls -la "$OUT"; echo; cat "$OUT/SHA256SUMS.txt"
+
+      - name: Self-verify the checksums before publishing
+        run: |
+          set -euo pipefail
+          cd "release/${{ steps.ver.outputs.version }}"
+          sha256sum -c SHA256SUMS.txt
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: Frolo ${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          prerelease: ${{ contains(steps.ver.outputs.version, '-') }}
+          files: |
+            release/${{ steps.ver.outputs.version }}/docker-compose.yml
+            release/${{ steps.ver.outputs.version }}/install.sh
+            release/${{ steps.ver.outputs.version }}/frolo-${{ steps.ver.outputs.version }}.tar.gz
+            release/${{ steps.ver.outputs.version }}/SHA256SUMS.txt

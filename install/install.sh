@@ -91,6 +91,14 @@ write_compose() {
       echo "FROLO_IMAGE=${FROLO_IMAGE}"
       echo "FROLO_BIND=0.0.0.0"
       echo "FROLO_BEHIND_TLS=0"
+      echo "# Real mode is OFF by default. Set BOTH to 1 and select a Proxmox"
+      echo "# connection in the panel to enable real Proxmox/SSH/router automation."
+      echo "FROLO_ENABLE_REAL_MODE=0"
+      echo "FROLO_REAL_SAFETY_TESTS_PASSED=0"
+      echo "# Production PUBLIC license keys (never a private signing key). Provide"
+      echo "# inline JSON here or set FROLO_LICENSE_KEYS_FILE to a mounted file."
+      echo "FROLO_LICENSE_KEYS="
+      echo "FROLO_LICENSE_KEYS_FILE="
     } > "${FROLO_DIR}/.env"
     chmod 600 "${FROLO_DIR}/.env"
   fi
@@ -108,6 +116,11 @@ services:
       FROLO_DATA_DIR: "/opt/frolo/data"
       FROLO_WEB_ROOT: "/app/web"
       FROLO_BEHIND_TLS: "\${FROLO_BEHIND_TLS:-0}"
+      FROLO_ENABLE_REAL_MODE: "\${FROLO_ENABLE_REAL_MODE:-0}"
+      FROLO_REAL_SAFETY_TESTS_PASSED: "\${FROLO_REAL_SAFETY_TESTS_PASSED:-0}"
+      PLAYWRIGHT_BROWSERS_PATH: "/opt/frolo/pw-browsers"
+      FROLO_LICENSE_KEYS: "\${FROLO_LICENSE_KEYS:-}"
+      FROLO_LICENSE_KEYS_FILE: "\${FROLO_LICENSE_KEYS_FILE:-}"
     volumes:
       - ${DATA_VOLUME}:/opt/frolo/data
     stop_grace_period: 20s
@@ -154,6 +167,13 @@ cmd_install() {
   check_resources
   ensure_docker
   write_compose
+  # When installing the pinned release version online, fetch its checksum-verified
+  # compose bundle from GitHub first (best-effort: local/offline installs keep the
+  # freshly written compose). This makes a normal install checksum-verified too.
+  if is_semver_tag "v${FROLO_VERSION}"; then
+    fetch_release_bundle "v${FROLO_VERSION}" \
+      || log "Using the bundled compose (release bundle not fetched: offline or not yet published)."
+  fi
   log "Pulling pinned image ${FROLO_IMAGE}…"
   compose pull || warn "Could not pull image (offline or not published yet). If you built locally, set FROLO_IMAGE to your local tag."
   compose up -d
@@ -164,39 +184,54 @@ cmd_install() {
   fi
 }
 
+# Semantic-version tag only: vX.Y.Z or X.Y.Z with an optional -prerelease. We
+# NEVER accept "main", "latest", a branch, or a bare commit — Docker installs
+# must pin an explicit image tag, matching the source updater's tag-only policy.
+is_semver_tag() {
+  printf '%s' "$1" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'
+}
+
 # Fetch the pinned compose bundle + checksums for a specific release tag from
-# GitHub and verify the checksum before using it. Falls back to the in-repo
-# compose if a tag is not requested (offline / local builds).
+# GitHub, verify the checksum, and pin the image to that tag in .env.
 fetch_release_bundle() {
   local tag="$1"
   local base="${FROLO_RELEASE_BASE}/download/${tag}"
   local tmp; tmp="$(mktemp -d)"
   log "Downloading release bundle for ${tag} from ${base}…"
   if ! curl -fsSL "${base}/docker-compose.yml" -o "${tmp}/docker-compose.yml"; then
-    warn "Could not download docker-compose.yml for ${tag}. Keeping the current bundle."
+    err "Could not download docker-compose.yml for ${tag}."
     rm -rf "${tmp}"; return 1
   fi
   if curl -fsSL "${base}/SHA256SUMS.txt" -o "${tmp}/SHA256SUMS.txt"; then
     log "Verifying checksum…"
-    ( cd "${tmp}" && grep " docker-compose.yml$" SHA256SUMS.txt | shasum -a 256 -c - ) \
+    ( cd "${tmp}" && grep " [*]\{0,1\}docker-compose.yml$" SHA256SUMS.txt | shasum -a 256 -c - ) \
       || { err "Checksum verification failed for ${tag}. Aborting update."; rm -rf "${tmp}"; return 1; }
   else
-    warn "No SHA256SUMS.txt published for ${tag}; cannot verify the bundle. Aborting for safety."
+    err "No SHA256SUMS.txt published for ${tag}; cannot verify the bundle. Aborting for safety."
     rm -rf "${tmp}"; return 1
   fi
   cp "${tmp}/docker-compose.yml" "${COMPOSE_FILE}"
   rm -rf "${tmp}"
-  log "Installed verified compose bundle for ${tag}."
+  # Pin the image to the requested tag so `compose pull` actually moves to it.
+  local pinned="ghcr.io/${FROLO_REPO}:${tag#v}"
+  if grep -q '^FROLO_IMAGE=' "${FROLO_DIR}/.env" 2>/dev/null; then
+    sed -i.bak "s#^FROLO_IMAGE=.*#FROLO_IMAGE=${pinned}#" "${FROLO_DIR}/.env" && rm -f "${FROLO_DIR}/.env.bak"
+  else
+    echo "FROLO_IMAGE=${pinned}" >> "${FROLO_DIR}/.env"
+  fi
+  FROLO_IMAGE="${pinned}"
+  log "Installed verified compose bundle for ${tag}; image pinned to ${pinned}."
 }
 
 cmd_update() {
   require_root
   ensure_docker
   [ -f "$COMPOSE_FILE" ] || die "Frolo is not installed (no ${COMPOSE_FILE})."
-  # `update <tag>` pulls the pinned, checksum-verified release bundle from GitHub;
-  # `update` alone just re-pulls the currently-pinned image.
+  # `update <tag>` pulls the pinned, checksum-verified release bundle from GitHub
+  # and repins the image tag; `update` alone re-pulls the currently-pinned image.
   local tag="${1:-}"
   if [ -n "$tag" ]; then
+    is_semver_tag "$tag" || die "Refusing to update to '${tag}': only a semantic-version tag (e.g. v1.2.3) is allowed, never a branch/latest/unpinned ref."
     fetch_release_bundle "$tag" || die "Update to ${tag} aborted."
   fi
   log "Updating to ${FROLO_IMAGE}…"

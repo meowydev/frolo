@@ -4,7 +4,7 @@
 // real key ceremony so the trust flow (store private key in vault, TOFU pin)
 // can be exercised in mock mode. The fake NEVER emits usable credentials.
 
-import { randomBytes, generateKeyPairSync } from "node:crypto";
+import { randomBytes, generateKeyPairSync, createPublicKey, type KeyObject } from "node:crypto";
 import type { KeyGenerator } from "./deps.js";
 
 export class FakeKeyGenerator implements KeyGenerator {
@@ -25,7 +25,7 @@ export class FakeKeyGenerator implements KeyGenerator {
 // key fingerprint is LEARNED on first connect (TOFU), not predicted, so the
 // expected value is empty until the guest is first reached.
 export class RealKeyGenerator implements KeyGenerator {
-  generate(_deploymentId: string): {
+  generate(deploymentId: string): {
     privateKey: string;
     publicKey: string;
     expectedHostKeyFingerprint: string;
@@ -35,12 +35,37 @@ export class RealKeyGenerator implements KeyGenerator {
       privateKeyEncoding: { format: "pem", type: "pkcs8" },
     });
     return {
+      // PKCS8 PEM private key — accepted directly by ssh2 for authentication.
       privateKey: privateKey.toString(),
-      // Note: real SSH deployments format this as an OpenSSH public key; the
-      // desktop app performs that conversion. Kept as PEM here for the seam.
-      publicKey: publicKey.toString(),
+      // OpenSSH-format public key ("ssh-ed25519 AAAA... comment") so cloud-init
+      // can drop it straight into the guest's authorized_keys. sshd rejects PEM
+      // SPKI, so we must emit the OpenSSH wire format here (the server IS the
+      // app now — there is no separate desktop layer to convert it).
+      publicKey: toOpenSshEd25519(
+        createPublicKey({ key: publicKey.toString(), format: "pem", type: "spki" }),
+        `frolo-${deploymentId}`,
+      ),
       // TOFU: pin on first connect rather than predict (empty = "not yet pinned").
       expectedHostKeyFingerprint: "",
     };
   }
+}
+
+// Encode an ed25519 public KeyObject as an OpenSSH authorized_keys line.
+// Wire format: string("ssh-ed25519") || string(raw 32-byte key), each field
+// length-prefixed with a 4-byte big-endian length; then base64 it.
+export function toOpenSshEd25519(pub: KeyObject, comment = ""): string {
+  const der = pub.export({ format: "der", type: "spki" }) as Buffer;
+  // ed25519 SPKI DER is a fixed 44 bytes; the raw key is the trailing 32 bytes.
+  const raw = der.subarray(der.length - 32);
+  const algo = Buffer.from("ssh-ed25519", "ascii");
+  const wire = Buffer.concat([lenPrefixed(algo), lenPrefixed(raw)]);
+  const b64 = wire.toString("base64");
+  return `ssh-ed25519 ${b64}${comment ? ` ${comment}` : ""}`;
+}
+
+function lenPrefixed(buf: Buffer): Buffer {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(buf.length, 0);
+  return Buffer.concat([len, buf]);
 }

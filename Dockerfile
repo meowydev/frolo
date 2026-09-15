@@ -1,10 +1,16 @@
 # Frolo production image (req: production Dockerfile). Multi-stage:
 #  1) builder: installs deps, builds all packages + the web panel
-#  2) runtime: slim Node image running the Fastify server, serving the built UI
+#  2) runtime: slim Node image running the Fastify server, serving the built UI,
+#     with ssh2 (real guest provider) and Playwright + Chromium (router Teach
+#     Mode / replay) available for real mode.
 #
 # The image bundles ONLY the public app. No development or production signing
-# keys are copied in (there are none in the repo). Data lives in a mounted
-# volume at /opt/frolo/data.
+# keys are copied in (there are none in the repo) and frolo-server/ is excluded
+# by .dockerignore. Data lives in a mounted volume at /opt/frolo/data.
+
+# Pin the Playwright browser location so both stages agree and the runtime user
+# can read it. Keep in sync with the playwright dependency version.
+ARG PLAYWRIGHT_BROWSERS_PATH=/opt/frolo/pw-browsers
 
 # ---- Builder ----
 FROM node:22-bookworm-slim AS builder
@@ -18,6 +24,9 @@ RUN apt-get update \
 RUN corepack enable && corepack prepare pnpm@11.22.0 --activate
 
 # Install with the full workspace (lockfile + manifests first for cache).
+# Skip the automatic browser download during install; Chromium is installed
+# explicitly in the runtime stage to the pinned PLAYWRIGHT_BROWSERS_PATH.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
 COPY packages ./packages
 COPY apps ./apps
@@ -35,19 +44,22 @@ RUN pnpm prune --prod
 
 # ---- Runtime ----
 FROM node:22-bookworm-slim AS runtime
+ARG PLAYWRIGHT_BROWSERS_PATH
 WORKDIR /app
 ENV NODE_ENV=production \
     FROLO_PORT=4512 \
     FROLO_HOST=0.0.0.0 \
     FROLO_DATA_DIR=/opt/frolo/data \
-    FROLO_WEB_ROOT=/app/web
+    FROLO_WEB_ROOT=/app/web \
+    PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH}
 
-# Minimal runtime deps (ca-certificates for outbound TLS to Proxmox in real mode).
+# Minimal runtime deps (ca-certificates for outbound TLS to Proxmox in real
+# mode; tini as PID 1; curl for the source updater / diagnostics).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates tini \
+ && apt-get install -y --no-install-recommends ca-certificates tini curl \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 --home /app frolo \
- && mkdir -p /opt/frolo/data \
+ && mkdir -p /opt/frolo/data ${PLAYWRIGHT_BROWSERS_PATH} \
  && chown -R frolo:frolo /opt/frolo /app
 
 # Copy the built workspace + node_modules from the builder.
@@ -55,6 +67,21 @@ COPY --from=builder --chown=frolo:frolo /build/node_modules ./node_modules
 COPY --from=builder --chown=frolo:frolo /build/packages ./packages
 COPY --from=builder --chown=frolo:frolo /build/package.json ./package.json
 COPY --from=builder --chown=frolo:frolo /build/apps/ui/dist ./web
+
+# Install Chromium + its Linux libraries for router Teach Mode / replay. Runs as
+# root so `--with-deps` can apt-get the shared libraries, then hands the browser
+# directory to the frolo user. pnpm's isolated store means `playwright` is not at
+# node_modules/playwright, so resolve its CLI relative to the router package that
+# depends on it.
+RUN PW_CLI="$(node -e "const {createRequire}=require('node:module');const req=createRequire('/app/packages/providers-router/package.json');process.stdout.write(require('node:path').join(require('node:path').dirname(req.resolve('playwright/package.json')),'cli.js'))")" \
+ && echo "Playwright CLI: $PW_CLI" \
+ && node "$PW_CLI" install --with-deps chromium \
+ && chown -R frolo:frolo ${PLAYWRIGHT_BROWSERS_PATH} \
+ && rm -rf /var/lib/apt/lists/*
+
+# Fail the build early if Chromium can't launch (baked-in smoke check).
+COPY --chown=frolo:frolo scripts/chromium-smoke.mjs ./scripts/chromium-smoke.mjs
+RUN node ./scripts/chromium-smoke.mjs
 
 USER frolo
 EXPOSE 4512

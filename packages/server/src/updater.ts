@@ -35,8 +35,14 @@ export interface ReleaseInfo {
   name: string;
   publishedAt: string;
   prerelease: boolean;
-  // The source tarball URL (GitHub's auto-generated tag tarball).
-  tarballUrl: string;
+  // URL of the SOURCE RELEASE ASSET we build from and verify — the exact
+  // `frolo-<version>.tar.gz` file uploaded to the release, NOT GitHub's
+  // auto-generated tag tarball. The published SHA256SUMS.txt covers THIS file,
+  // so this is the only artifact whose checksum can match. Undefined if the
+  // release does not attach a source asset (then install is refused).
+  sourceAssetUrl?: string;
+  // Name of that asset (for matching the SHA256SUMS line, e.g. frolo-1.2.3.tar.gz).
+  sourceAssetName?: string;
   // URL of the SHA256SUMS asset, if the release publishes one.
   checksumsUrl?: string;
   body?: string;
@@ -191,27 +197,38 @@ export class SourceUpdater {
     return toReleaseInfo(r, this.cfg.repo);
   }
 
-  // Download + verify the source tarball's SHA-256 against the release checksums.
-  // Returns the verified archive bytes. Verification happens BEFORE extraction.
+  // Download + verify the SOURCE RELEASE ASSET's SHA-256 against the release's
+  // SHA256SUMS. We download the exact `frolo-<version>.tar.gz` asset that the
+  // checksums file covers — never GitHub's auto-generated tag tarball, whose
+  // bytes differ and would always fail verification. Verification happens BEFORE
+  // extraction. Returns the verified archive bytes.
   async downloadAndVerify(rel: ReleaseInfo): Promise<{ archive: Uint8Array; sha256: string }> {
-    this.setProgress("downloading", `Downloading ${rel.tag}…`, rel.tag);
-    const archive = await this.io.fetchBytes(rel.tarballUrl, this.ghHeaders());
+    if (!rel.sourceAssetUrl || !rel.sourceAssetName) {
+      throw new Error(
+        `release ${rel.tag} does not attach a source asset (expected ${sourceAssetName(rel.tag)}); ` +
+          `refusing to install — the auto-generated tag tarball is not checksum-verifiable`,
+      );
+    }
+    if (!rel.checksumsUrl) {
+      throw new Error(
+        `release ${rel.tag} does not publish a SHA256SUMS.txt asset; refusing to install unverifiable source`,
+      );
+    }
+
+    this.setProgress("downloading", `Downloading ${rel.sourceAssetName}…`, rel.tag);
+    const archive = await this.io.fetchBytes(rel.sourceAssetUrl, this.ghHeaders());
     const sha256 = createHash("sha256").update(archive).digest("hex");
 
     this.setProgress("verifying", "Verifying checksum…", rel.tag);
-    if (!rel.checksumsUrl) {
-      throw new Error(
-        `release ${rel.tag} does not publish a SHA256SUMS asset; refusing to install unverifiable source`,
-      );
-    }
     const sums = await this.io.fetchText(rel.checksumsUrl, this.ghHeaders());
-    const expected = findSourceChecksum(sums, rel.tag);
+    // Match the checksum line for THIS asset by its exact filename.
+    const expected = findChecksumForFile(sums, rel.sourceAssetName);
     if (!expected) {
-      throw new Error(`no source-archive checksum found in SHA256SUMS for ${rel.tag}`);
+      throw new Error(`no checksum for ${rel.sourceAssetName} found in SHA256SUMS.txt for ${rel.tag}`);
     }
     if (expected.toLowerCase() !== sha256.toLowerCase()) {
       throw new Error(
-        `checksum mismatch for ${rel.tag}: expected ${expected}, got ${sha256} — refusing to install`,
+        `checksum mismatch for ${rel.sourceAssetName}: expected ${expected}, got ${sha256} — refusing to install`,
       );
     }
     return { archive, sha256 };
@@ -289,42 +306,51 @@ interface GhRelease {
   assets?: GhAsset[];
 }
 
-function toReleaseInfo(r: GhRelease, repo: string): ReleaseInfo {
-  const checksums = (r.assets ?? []).find((a) => /^sha256sums(\.txt)?$/i.test(a.name));
+// The canonical source-asset filename the updater builds from and the release
+// pipeline uploads. Keep this in sync with scripts/build-release.sh + CI.
+export function sourceAssetName(tag: string): string {
+  return `frolo-${normalizeTag(tag)}.tar.gz`;
+}
+
+function toReleaseInfo(r: GhRelease, _repo: string): ReleaseInfo {
+  const assets = r.assets ?? [];
+  const checksums = assets.find((a) => /^sha256sums(\.txt)?$/i.test(a.name));
+  const wanted = sourceAssetName(r.tag_name);
+  // Match the named source asset exactly (frolo-<version>.tar.gz). This is the
+  // ONLY artifact the checksums cover; we never fall back to tarball_url.
+  const source =
+    assets.find((a) => a.name.toLowerCase() === wanted.toLowerCase()) ??
+    assets.find((a) => /^frolo-.*\.tar\.gz$/i.test(a.name));
   return {
     tag: r.tag_name,
     name: r.name ?? r.tag_name,
     publishedAt: r.published_at ?? "",
     prerelease: Boolean(r.prerelease),
-    // Prefer the API-provided tarball_url; fall back to the canonical tag tarball
-    // for the configured repository (e.g. meowydev/frolo).
-    tarballUrl:
-      r.tarball_url ??
-      `https://github.com/${repo}/archive/refs/tags/${encodeURIComponent(r.tag_name)}.tar.gz`,
+    sourceAssetUrl: source?.browser_download_url,
+    sourceAssetName: source?.name,
     checksumsUrl: checksums?.browser_download_url,
     body: r.body,
   };
 }
 
-// Parse a SHA256SUMS file and return the checksum for the source archive line.
-// Accepts lines like:  <sha256>␠␠<filename>   and matches the tag's tarball or a
-// generic "source" / ".tar.gz" entry.
-export function findSourceChecksum(sums: string, tag: string): string | null {
-  const t = normalizeTag(tag);
+// Parse a SHA256SUMS file and return the checksum for a specific filename.
+// Accepts `sha256sum`-style lines: "<64-hex>␠␠<filename>" (the leading "*" that
+// coreutils uses for binary mode is tolerated). Matches on the basename so a
+// "./frolo-x.tar.gz" or "frolo-x.tar.gz" entry both resolve.
+export function findChecksumForFile(sums: string, fileName: string): string | null {
+  const target = basename(fileName).toLowerCase();
   const lines = sums.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const parsed = lines
-    .map((l) => {
-      const m = l.match(/^([0-9a-fA-F]{64})[ \t*]+(.+)$/);
-      return m ? { sha: m[1]!, file: m[2]! } : null;
-    })
-    .filter((x): x is { sha: string; file: string } => x !== null);
+  for (const line of lines) {
+    const m = line.match(/^([0-9a-fA-F]{64})\s+\*?(.+)$/);
+    if (!m) continue;
+    if (basename(m[2]!).toLowerCase() === target) return m[1]!;
+  }
+  return null;
+}
 
-  // 1) exact tag tarball, e.g. frolo-0.1.0-beta.2.tar.gz or v0.1.0-beta.2.tar.gz
-  const byTag = parsed.find((p) => p.file.includes(t) && /\.tar\.gz$/i.test(p.file));
-  if (byTag) return byTag.sha;
-  // 2) any single .tar.gz "source" entry
-  const src = parsed.find((p) => /\.tar\.gz$/i.test(p.file));
-  return src ? src.sha : null;
+function basename(p: string): string {
+  const parts = p.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] ?? p;
 }
 
 export function normalizeTag(tag: string): string {

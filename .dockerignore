@@ -2,6 +2,7 @@ node_modules
 **/node_modules
 **/dist
 .git
+.github
 .dev-data
 coverage
 *.sqlite
@@ -11,3 +12,21 @@ data
 .env
 .env.*
 release
+
+# PRIVATE service + secrets — MUST NEVER enter the public image build context.
+# The commercial issuer, Boosty records, admin service, production signing key,
+# and subscriber data live here and are excluded from the repo and the image.
+frolo-server
+frolo-server/**
+
+# Any stray key / secret material.
+*.pem
+*.key
+keys
+**/keys
+license
+**/*.private.json
+
+# Local Playwright browser caches (Chromium is installed inside the image).
+ms-playwright
+**/.cache/ms-playwright

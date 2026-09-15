@@ -51,8 +51,10 @@ export class RealGuestProvider implements GuestProvider {
       user: target.sshUser,
       privateKey,
     });
-    // TOFU: if we have a pinned fingerprint, it must match (req §18.5).
+    // TOFU: if we have a pinned fingerprint, it must match (req §18.5). Close the
+    // freshly-opened connection before failing closed so we never leak a socket.
     if (target.hostKeyFingerprint && target.hostKeyFingerprint !== presentedHostKeyFingerprint) {
+      await this.config.transport.close().catch(() => {});
       throw new HostKeyMismatch("guest host key changed since first connect; refusing to continue");
     }
   }
@@ -85,6 +87,11 @@ export class RealGuestProvider implements GuestProvider {
 
   async httpGet(_target: GuestTarget, path: string): Promise<{ status: number; body: string }> {
     return this.config.transport.httpGet(path);
+  }
+
+  // Close the underlying SSH connection. Safe to call even if never connected.
+  async dispose(): Promise<void> {
+    await this.config.transport.close();
   }
 
   private async execExpectZero(command: string): Promise<OpResult> {

@@ -20,7 +20,10 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "ci": "pnpm run typecheck && pnpm run test",
-    "reset-setup": "node packages/server/dist/bin/frolo-reset-setup.js"
+    "reset-setup": "node packages/server/dist/bin/frolo-reset-setup.js",
+    "validate:real:proxmox": "node scripts/validate-real/proxmox-readonly.mjs",
+    "validate:real:proxmox-lifecycle": "node scripts/validate-real/proxmox-clone-delete.mjs",
+    "smoke:chromium": "node scripts/chromium-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

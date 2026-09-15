@@ -1,0 +1,74 @@
+# Frolo — Meowerity stack deployment overlay.
+#
+# Production-oriented compose for running Frolo on the Meowerity stack:
+#   - port 4512 (the app's fixed port)
+#   - persistent named volume for all state (SQLite, encrypted vault, keys)
+#   - restart: always (survives host reboots / crashes)
+#   - container health check on /api/health
+#   - LAN-only by default (binds 127.0.0.1); put it behind an HTTPS reverse
+#     proxy for remote access — Frolo never exposes itself through a router.
+#
+# Pin FROLO_IMAGE to an explicit released version tag (never :latest in a real
+# deployment). Real Proxmox/SSH/router automation stays OFF unless BOTH real-mode
+# flags are 1 AND an operator selects a connection in the panel.
+#
+# Usage:
+#   FROLO_IMAGE=ghcr.io/meowydev/frolo:0.1.0-beta.1 \
+#     docker compose -f deploy/meowerity/docker-compose.yml up -d
+
+services:
+  frolo:
+    image: ${FROLO_IMAGE:?set FROLO_IMAGE to a pinned version, e.g. ghcr.io/meowydev/frolo:0.1.0-beta.1}
+    container_name: frolo
+    restart: always
+    # Bind to loopback by default so only the reverse proxy (or an SSH tunnel)
+    # can reach it. Set FROLO_BIND=0.0.0.0 ONLY for a trusted LAN with no proxy.
+    ports:
+      - "${FROLO_BIND:-127.0.0.1}:4512:4512"
+    environment:
+      FROLO_PORT: "4512"
+      FROLO_HOST: "0.0.0.0"
+      FROLO_DATA_DIR: "/opt/frolo/data"
+      FROLO_WEB_ROOT: "/app/web"
+      # Set to 1 when Frolo runs behind an HTTPS reverse proxy (enables Secure
+      # cookies + the correct Origin/CSRF handling). Provide the external
+      # hostname(s) via FROLO_ALLOWED_ORIGINS (comma-separated).
+      FROLO_BEHIND_TLS: "${FROLO_BEHIND_TLS:-0}"
+      FROLO_ALLOWED_ORIGINS: "${FROLO_ALLOWED_ORIGINS:-}"
+      # Chromium location baked into the image (router Teach Mode / replay).
+      PLAYWRIGHT_BROWSERS_PATH: "/opt/frolo/pw-browsers"
+
+      # --- Real mode (OFF by default) --------------------------------------
+      FROLO_ENABLE_REAL_MODE: "${FROLO_ENABLE_REAL_MODE:-0}"
+      FROLO_REAL_SAFETY_TESTS_PASSED: "${FROLO_REAL_SAFETY_TESTS_PASSED:-0}"
+
+      # --- Production licensing (PUBLIC keys only) -------------------------
+      # Provide inline JSON in FROLO_LICENSE_KEYS, or mount a file (see volumes)
+      # and set FROLO_LICENSE_KEYS_FILE. NEVER put a private signing key here.
+      FROLO_LICENSE_KEYS: "${FROLO_LICENSE_KEYS:-}"
+      FROLO_LICENSE_KEYS_FILE: "${FROLO_LICENSE_KEYS_FILE:-}"
+    volumes:
+      - frolo-data:/opt/frolo/data
+      # Optional read-only mount for production public license keys:
+      #   FROLO_LICENSE_DIR=/etc/frolo/license  (host dir containing keys.json)
+      #   FROLO_LICENSE_KEYS_FILE=/opt/frolo/license/keys.json
+      # - ${FROLO_LICENSE_DIR:-./license}:/opt/frolo/license:ro
+    stop_grace_period: 20s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4512/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Sensible production hardening: no new privileges, bounded logs.
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  frolo-data:
+    name: frolo-data

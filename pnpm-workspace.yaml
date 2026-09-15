@@ -12,3 +12,10 @@ verifyDepsBeforeRun: false
 allowBuilds:
   better-sqlite3: true
   esbuild: true
+  # ssh2 works with pure-JS crypto; `cpu-features` is an OPTIONAL native
+  # accelerator whose build needs a C++ toolchain. We deliberately do NOT build
+  # it so `pnpm install` never fails on a missing compiler; ssh2 falls back
+  # cleanly. Playwright browsers are installed explicitly in the Dockerfile
+  # (PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD during install).
+  cpu-features: false
+  ssh2: false

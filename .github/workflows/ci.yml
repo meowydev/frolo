@@ -1,0 +1,58 @@
+# Continuous integration: lint, typecheck, test, and production build on every
+# push and pull request. Chromium is installed so the router driver smoke test
+# runs for real (it self-skips only when the binary is genuinely unavailable).
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["**"] # tag pushes are handled by release.yml, not CI
+  pull_request:
+  workflow_call: # invoked by release.yml as its pre-publish gate
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Corepack + pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.22.0 --activate
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      # Skip Playwright's browser download during install; we install Chromium
+      # explicitly below so the cache key is stable.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: Install Chromium for router smoke test
+        run: pnpm --filter @frolo/providers-router exec playwright install --with-deps chromium
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Production build (packages + web panel)
+        run: pnpm run build
+
+      - name: Audit production dependencies (no high/critical)
+        run: pnpm audit --prod --audit-level high

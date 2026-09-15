@@ -211,7 +211,14 @@ export class DeploymentOrchestrator {
         publicAddressSim: final.publicAddressSim,
       };
     } finally {
-      this.deps.sanitizer; // (literals stay registered for the process lifetime)
+      // Release any open guest connection (real SSH channel) on every exit path,
+      // success or failure. Mock providers implement no dispose(); the optional
+      // call is a no-op there.
+      try {
+        await this.deps.guest.dispose?.();
+      } catch {
+        /* closing the transport must never mask the deployment outcome */
+      }
     }
   }
 
